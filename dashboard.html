@@ -4,17 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rift Dashboard</title>
+    <link rel="icon" type="image/png" href="https://media.discordapp.net/attachments/1469631519327912012/1482880775467831358/cropped_circle_image.png?ex=69b88fd7&is=69b73e57&hm=6aaf7aa96eb90a0b3cec2ce4e4d759afb4a1ae4552c565a2b2c600478742033d&=&format=webp&quality=lossless">
     <link rel="stylesheet" href="assets/css/dashboard.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body class="dark-theme">
+    <canvas id="dashboard-stars-canvas"></canvas>
+
     <div class="glass-container">
-        <!-- Sidebar -->
         <nav class="sidebar">
             <div class="sidebar-header">
                 <div class="logo">
-                    <i class="fa-solid fa-bolt-lightning"></i>
+                    <img src="https://media.discordapp.net/attachments/1469631519327912012/1482879054590771402/images.png?ex=69b88e3d&is=69b73cbd&hm=eb276178b439b3f306e200db3f35117141c91972621653ddd3bc3a42f98c3af0&=&format=webp&quality=lossless" alt="Rift Logo" class="sidebar-logo-img">
                     <span>RIFT</span>
                 </div>
             </div>
@@ -47,7 +49,6 @@
             </div>
         </nav>
 
-        <!-- Main Content -->
         <main class="main-content">
             <header class="top-bar">
                 <h1 id="activeTabTitle">Overview</h1>
@@ -58,7 +59,6 @@
             </header>
 
             <div class="content-scroll-area">
-                <!-- Overview Tab -->
                 <section id="overview" class="tab-pane active">
                     <div class="stats-grid">
                         <div class="stat-card glass">
@@ -101,14 +101,23 @@
                     </div>
                 </section>
 
-                <!-- Music Tab -->
                 <section id="music" class="tab-pane">
                     <div class="music-layout">
+                        
                         <div class="player-main glass">
                             <div class="guild-selector">
                                 <select id="musicGuildSelect">
                                     <option value="">Select a Server</option>
                                 </select>
+                            </div>
+
+                            <div class="music-search-container">
+                                <div class="search-box">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                    <input type="text" id="songSearchInput" placeholder="Search for a song or paste a URL..." autocomplete="off">
+                                </div>
+                                <div id="searchResults" class="search-results-dropdown hidden">
+                                    </div>
                             </div>
                             
                             <div class="now-playing">
@@ -141,8 +150,20 @@
                             </div>
                         </div>
 
+                        <div class="lyrics-panel glass">
+                            <h3><i class="fa-solid fa-microphone-lines"></i> Live Lyrics</h3>
+                            <div class="lyrics-container" id="lyricsContainer">
+                                <div class="lyric-placeholder">Lyrics will appear here when a song plays...</div>
+                            </div>
+                        </div>
+
                         <div class="music-sidebar glass">
-                            <h3>Queue</h3>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                                <h3>Queue</h3>
+                                <button class="btn-icon btn-sm" onclick="musicControl('clear_queue')" title="Clear Queue">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </div>
                             <ul id="queueList" class="queue-list">
                                 <li class="empty-msg">Queue is empty</li>
                             </ul>
@@ -150,14 +171,12 @@
                     </div>
                 </section>
 
-                <!-- Servers Tab -->
                 <section id="servers" class="tab-pane">
                     <div id="serverList" class="server-grid">
                         <div class="loading-state">Login to manage your servers</div>
                     </div>
                 </section>
 
-                <!-- Settings Tab -->
                 <section id="settings" class="tab-pane">
                     <div class="settings-container glass">
                         <h3>Global Settings</h3>

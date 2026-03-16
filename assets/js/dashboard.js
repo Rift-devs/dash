@@ -9,39 +9,118 @@ let userProfile = null;
 let selectedGuildId = null;
 let currentTrackDuration = 0;
 let isSeeking = false;
+let isPlaying = false;
+
+// Interpolation Engine (For smooth lyrics)
+let localTimeMs = 0;
+let lastSyncTimestamp = 0;
+let lyricsData = [];
+let activeLyricIndex = -1;
 
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {
+    initFallingStars();
     initTabs();
     initWebSocket();
     checkAuth();
     
-    // Music Controls
+    // Music Event Listeners
     document.getElementById('musicGuildSelect').addEventListener('change', (e) => {
         selectedGuildId = e.target.value;
         updateMusicState();
     });
 
-    document.getElementById('seekBar').addEventListener('input', () => isSeeking = true);
-    document.getElementById('seekBar').addEventListener('change', (e) => {
+    const seekBar = document.getElementById('seekBar');
+    seekBar.addEventListener('input', () => isSeeking = true);
+    seekBar.addEventListener('change', (e) => {
         isSeeking = false;
         const newPos = (e.target.value / 100) * currentTrackDuration;
-        musicControl('seek', newPos);
+        musicControl('seek', newPos); // Requires backend support if seeking implemented via /control
+        localTimeMs = newPos;
+        lastSyncTimestamp = Date.now();
     });
 
     document.getElementById('volumeSlider').addEventListener('change', (e) => {
         musicControl('volume', e.target.value);
     });
+
+    // Search Box Listener
+    let searchTimeout;
+    const searchInput = document.getElementById('songSearchInput');
+    searchInput.addEventListener('input', (e) => {
+        clearTimeout(searchTimeout);
+        const q = e.target.value.trim();
+        if (!q) {
+            document.getElementById('searchResults').classList.add('hidden');
+            return;
+        }
+        searchTimeout = setTimeout(() => searchMusic(q), 500);
+    });
+
+    // Start Animation Loop for smooth progress & lyrics
+    requestAnimationFrame(animationLoop);
 });
 
-// Navigation
+/* ================= BACKGROUND ANIMATION ================= */
+function initFallingStars() {
+    const canvas = document.getElementById('dashboard-stars-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let width, height, stars = [];
+
+    function resize() {
+        width = canvas.width = window.innerWidth;
+        height = canvas.height = window.innerHeight;
+    }
+
+    function createStar() {
+        return {
+            x: Math.random() * width,
+            y: Math.random() * height,
+            r: Math.random() * 1.5 + 0.5,
+            speed: Math.random() * 0.5 + 0.1,
+            opacity: Math.random() * 0.5 + 0.1,
+            pulseSpeed: Math.random() * 0.02 + 0.005,
+            pulseOffset: Math.random() * Math.PI * 2
+        };
+    }
+
+    function init() {
+        resize();
+        stars = Array.from({ length: 150 }, createStar);
+    }
+
+    let frame = 0;
+    function draw() {
+        ctx.clearRect(0, 0, width, height);
+        frame++;
+        for (let s of stars) {
+            s.y += s.speed;
+            if (s.y > height + 5) {
+                s.y = -5;
+                s.x = Math.random() * width;
+            }
+            const pulse = s.opacity * (0.5 + 0.5 * Math.sin(frame * s.pulseSpeed + s.pulseOffset));
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(255,255,255,${pulse})`;
+            ctx.fill();
+        }
+        requestAnimationFrame(draw);
+    }
+
+    window.addEventListener('resize', resize);
+    init();
+    draw();
+}
+
+/* ================= NAVIGATION ================= */
 function initTabs() {
     const links = document.querySelectorAll('.nav-links li');
     links.forEach(link => {
         link.addEventListener('click', () => {
             const target = link.dataset.tab;
             
-            // UI Update
             links.forEach(l => l.classList.remove('active'));
             link.classList.add('active');
             
@@ -53,12 +132,11 @@ function initTabs() {
     });
 }
 
-// Real-time Updates via WebSocket
+/* ================= WEBSOCKET (STATS) ================= */
 function initWebSocket() {
     ws = new WebSocket(WS_URL);
     
     ws.onopen = () => {
-        console.log("WebSocket Connected");
         document.getElementById('connectionStatus').textContent = "Connected";
         document.querySelector('.status-indicator').className = "status-indicator online";
     };
@@ -71,7 +149,6 @@ function initWebSocket() {
     };
     
     ws.onclose = () => {
-        console.log("WebSocket Disconnected, retrying...");
         document.getElementById('connectionStatus').textContent = "Reconnecting...";
         document.querySelector('.status-indicator').className = "status-indicator";
         setTimeout(initWebSocket, 3000);
@@ -94,7 +171,7 @@ function updateStats(data) {
     document.getElementById('ram-progress').style.width = `${data.ram_percent}%`;
 }
 
-// Authentication
+/* ================= AUTHENTICATION ================= */
 function login() {
     const redirect = encodeURIComponent(window.location.href.split('#')[0]);
     window.location.href = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${redirect}&response_type=token&scope=identify%20guilds`;
@@ -120,11 +197,10 @@ async function fetchProfile(token) {
         
         document.getElementById('userCard').innerHTML = `
             <div class="user-info" style="display:flex; align-items:center; gap:12px;">
-                <img src="https://cdn.discordapp.com/avatars/${userProfile.id}/${userProfile.avatar}.png" style="width:32px; height:32px; border-radius:50%;">
+                <img src="https://cdn.discordapp.com/avatars/${userProfile.id}/${userProfile.avatar}.png" style="width:32px; height:32px; border-radius:50%; border: 1px solid rgba(255,255,255,0.1)">
                 <span style="font-weight:500;">${userProfile.username}</span>
             </div>
         `;
-        
         fetchGuilds(token);
     } catch (e) {
         localStorage.removeItem('d_token');
@@ -155,14 +231,62 @@ function renderServerGrid(guilds) {
     const grid = document.getElementById('serverList');
     grid.innerHTML = guilds.map(g => `
         <div class="glass" style="display:flex; flex-direction:column; align-items:center; gap:15px; text-align:center;">
-            <img src="${g.icon ? `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png'}" style="width:64px; height:64px; border-radius:50%;">
+            <img src="${g.icon ? `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png'}" style="width:64px; height:64px; border-radius:50%; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
             <div style="font-weight:600;">${g.name}</div>
             <button class="login-btn" style="padding:8px 16px; font-size:12px;">Manage</button>
         </div>
     `).join('');
 }
 
-// Music Management
+/* ================= SEARCH ENGINE ================= */
+async function searchMusic(query) {
+    try {
+        const res = await fetch(`${API_BASE}/music/search`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query })
+        });
+        const data = await res.json();
+        const resultsBox = document.getElementById('searchResults');
+        
+        if (data.results && data.results.length > 0) {
+            resultsBox.innerHTML = data.results.map((track, i) => `
+                <div class="search-item" onclick="playSearchedTrack('${track.uri}')">
+                    <img src="${track.artwork || 'https://via.placeholder.com/40x40/1a1a1a/ffffff?text=♫'}">
+                    <div class="search-item-info">
+                        <span class="search-item-title">${track.title}</span>
+                        <span class="search-item-author">${track.author}</span>
+                    </div>
+                    <span class="search-item-dur">${formatTime(track.duration)}</span>
+                </div>
+            `).join('');
+            resultsBox.classList.remove('hidden');
+        } else {
+            resultsBox.innerHTML = '<div style="padding:15px; text-align:center; color:#a0a0a8;">No results found</div>';
+            resultsBox.classList.remove('hidden');
+        }
+    } catch (e) {
+        console.error("Search failed");
+    }
+}
+
+// NOTE: Depending on your backend, 'play' action might need to be added to web_server.py
+window.playSearchedTrack = function(uri) {
+    document.getElementById('searchResults').classList.add('hidden');
+    document.getElementById('songSearchInput').value = '';
+    musicControl('play', uri); 
+}
+
+// Click outside hides search
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.music-search-container')) {
+        document.getElementById('searchResults').classList.add('hidden');
+    }
+});
+
+/* ================= MUSIC PLAYER & LYRICS ================= */
+let currentTrackUri = null;
+
 async function updateMusicState() {
     if (!selectedGuildId) return;
     
@@ -171,6 +295,13 @@ async function updateMusicState() {
         const data = await res.json();
         
         if (data.current) {
+            isPlaying = !data.paused;
+            // Sync interpolation local clock
+            if (Math.abs(localTimeMs - (data.position * 1000)) > 2000) {
+                localTimeMs = data.position * 1000;
+            }
+            lastSyncTimestamp = Date.now();
+
             document.getElementById('currentTrackTitle').textContent = data.current.title;
             document.getElementById('currentTrackAuthor').textContent = data.current.author;
             document.getElementById('albumArt').style.backgroundImage = `url(${data.current.artwork || ''})`;
@@ -178,13 +309,14 @@ async function updateMusicState() {
             document.getElementById('playPauseBtn').innerHTML = data.paused ? '<i class="fa-solid fa-play"></i>' : '<i class="fa-solid fa-pause"></i>';
             
             currentTrackDuration = data.current.duration;
-            if (!isSeeking) {
-                const percent = (data.position * 1000 / data.current.duration) * 100;
-                document.getElementById('seekBar').value = percent || 0;
-                document.getElementById('timeCurrent').textContent = formatTime(data.position * 1000);
-                document.getElementById('timeTotal').textContent = formatTime(data.current.duration);
+            
+            // Check if track changed to fetch new lyrics
+            if (currentTrackUri !== data.current.uri) {
+                currentTrackUri = data.current.uri;
+                fetchLyrics(data.current.title, data.current.author);
             }
         } else {
+            isPlaying = false;
             resetPlayer();
         }
         
@@ -194,13 +326,26 @@ async function updateMusicState() {
     }
 }
 
+// Advanced Queue Management (UI implementation sends signals to API)
 function renderQueue(queue) {
     const list = document.getElementById('queueList');
     if (!queue || queue.length === 0) {
         list.innerHTML = '<li class="empty-msg">Queue is empty</li>';
         return;
     }
-    list.innerHTML = queue.map((t, i) => `<li>${i+1}. ${t.title}</li>`).join('');
+    list.innerHTML = queue.map((t, i) => `
+        <li class="queue-item">
+            <div class="q-title">${i+1}. ${t.title}</div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span class="q-author">${t.author} (${formatTime(t.duration)})</span>
+                <div class="q-controls">
+                    <button class="q-btn" onclick="musicControl('play_now', ${i})" title="Play Now"><i class="fa-solid fa-play"></i></button>
+                    <button class="q-btn" onclick="musicControl('move_up', ${i})" title="Move Up"><i class="fa-solid fa-arrow-up"></i></button>
+                    <button class="q-btn danger" onclick="musicControl('remove', ${i})" title="Remove"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+            </div>
+        </li>
+    `).join('');
 }
 
 function resetPlayer() {
@@ -209,16 +354,23 @@ function resetPlayer() {
     document.getElementById('albumArt').style.backgroundImage = 'none';
     document.getElementById('albumArt').innerHTML = '<i class="fa-solid fa-compact-disc fa-spin-slow"></i>';
     document.getElementById('seekBar').value = 0;
+    document.getElementById('lyricsContainer').innerHTML = '<div class="lyric-placeholder">Lyrics will appear here when a song plays...</div>';
+    lyricsData = [];
+    currentTrackUri = null;
+    localTimeMs = 0;
 }
 
+// Master API Controller
 async function musicControl(action, value = null) {
     if (!selectedGuildId) return;
-    await fetch(`${API_BASE}/music/control`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ guild_id: selectedGuildId, action, value })
-    });
-    setTimeout(updateMusicState, 500);
+    try {
+        await fetch(`${API_BASE}/music/control`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ guild_id: selectedGuildId, action, value })
+        });
+        setTimeout(updateMusicState, 500);
+    } catch(e) { console.error('Control failed:', e); }
 }
 
 function formatTime(ms) {
@@ -229,9 +381,126 @@ function formatTime(ms) {
     return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-// Auto-update music state if on music tab
+/* ================= LIVE SYNCED LYRICS ================= */
+async function fetchLyrics(title, author) {
+    const container = document.getElementById('lyricsContainer');
+    container.innerHTML = '<div class="lyric-placeholder"><i class="fa-solid fa-circle-notch fa-spin"></i> Fetching lyrics...</div>';
+    lyricsData = [];
+    activeLyricIndex = -1;
+
+    try {
+        // Clean strings for better LRCLIB matching
+        const cleanTitle = title.replace(/\s*[\(\[].*?[\)\]]/g, '').trim();
+        const url = `https://lrclib.net/api/search?track_name=${encodeURIComponent(cleanTitle)}&artist_name=${encodeURIComponent(author)}`;
+        
+        const res = await fetch(url);
+        const data = await res.json();
+
+        const best = data.find(t => t.syncedLyrics) || data.find(t => t.plainLyrics);
+        
+        if (best && best.syncedLyrics) {
+            parseSyncedLyrics(best.syncedLyrics);
+            renderLyrics();
+        } else if (best && best.plainLyrics) {
+            container.innerHTML = `<div class="lyric-placeholder" style="white-space:pre-wrap; text-align:left; color:#ccc;">${best.plainLyrics}</div>`;
+        } else {
+            container.innerHTML = '<div class="lyric-placeholder">No lyrics found for this track.</div>';
+        }
+    } catch (e) {
+        container.innerHTML = '<div class="lyric-placeholder">Failed to load lyrics.</div>';
+    }
+}
+
+function parseSyncedLyrics(lrcStr) {
+    const lines = lrcStr.split('\n');
+    const regex = /\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)/;
+    
+    lyricsData = [];
+    lines.forEach(line => {
+        const match = regex.exec(line);
+        if (match) {
+            const m = parseInt(match[1]);
+            const s = parseInt(match[2]);
+            const msStr = match[3].length === 2 ? match[3] + "0" : match[3];
+            const ms = parseInt(msStr);
+            const timeInMs = (m * 60 + s) * 1000 + ms;
+            const text = match[4].trim();
+            if (text) {
+                lyricsData.push({ time: timeInMs, text: text });
+            }
+        }
+    });
+}
+
+function renderLyrics() {
+    const container = document.getElementById('lyricsContainer');
+    container.innerHTML = '';
+    lyricsData.forEach((line, i) => {
+        const div = document.createElement('div');
+        div.className = 'lyric-line';
+        div.id = `lyric-${i}`;
+        div.textContent = line.text;
+        container.appendChild(div);
+    });
+}
+
+function updateLyricsGlow() {
+    if (lyricsData.length === 0) return;
+
+    let targetIndex = -1;
+    for (let i = 0; i < lyricsData.length; i++) {
+        if (localTimeMs >= lyricsData[i].time) {
+            targetIndex = i;
+        } else {
+            break;
+        }
+    }
+
+    if (targetIndex !== activeLyricIndex && targetIndex !== -1) {
+        if (activeLyricIndex !== -1) {
+            const oldObj = document.getElementById(`lyric-${activeLyricIndex}`);
+            if (oldObj) oldObj.classList.remove('active');
+        }
+        
+        activeLyricIndex = targetIndex;
+        const activeObj = document.getElementById(`lyric-${activeLyricIndex}`);
+        if (activeObj) {
+            activeObj.classList.add('active');
+            
+            // Smoothly center the lyric line inside the container
+            const container = document.getElementById('lyricsContainer');
+            const scrollPos = activeObj.offsetTop - (container.clientHeight / 2) + (activeObj.clientHeight / 2);
+            container.scrollTo({ top: scrollPos, behavior: 'smooth' });
+        }
+    }
+}
+
+/* ================= 60FPS ANIMATION ENGINE ================= */
+function animationLoop() {
+    if (isPlaying && currentTrackDuration > 0) {
+        const now = Date.now();
+        const delta = now - lastSyncTimestamp;
+        localTimeMs += delta;
+        lastSyncTimestamp = now;
+
+        // Cap local time
+        if (localTimeMs > currentTrackDuration) localTimeMs = currentTrackDuration;
+
+        // Update Progress Bar if user isn't holding it
+        if (!isSeeking) {
+            const percent = (localTimeMs / currentTrackDuration) * 100;
+            document.getElementById('seekBar').value = percent || 0;
+            document.getElementById('timeCurrent').textContent = formatTime(localTimeMs);
+        }
+
+        updateLyricsGlow();
+    }
+    requestAnimationFrame(animationLoop);
+}
+
+// Poll backend state safely
 setInterval(() => {
     if (document.getElementById('music').classList.contains('active')) {
         updateMusicState();
     }
-}, 2000);
+}, 2500);
