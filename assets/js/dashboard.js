@@ -363,22 +363,33 @@ function resetPlayer() {
 // Master API Controller
 async function musicControl(action, value = null) {
     if (!selectedGuildId) return;
+
+    // We send userProfile.id so the bot knows which VC to join
+    const payload = { 
+        guild_id: selectedGuildId, 
+        user_id: userProfile ? userProfile.id : null, 
+        action, 
+        value 
+    };
+
     try {
-        await fetch(`${API_BASE}/music/control`, {
+        const response = await fetch(`${API_BASE}/music/control`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ guild_id: selectedGuildId, action, value })
+            body: JSON.stringify(payload)
         });
-        setTimeout(updateMusicState, 500);
-    } catch(e) { console.error('Control failed:', e); }
-}
 
-function formatTime(ms) {
-    if (!ms) return "0:00";
-    const sec = Math.floor(ms / 1000);
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${m}:${s.toString().padStart(2, '0')}`;
+        if (!response.ok) {
+            const errData = await response.json();
+            console.error("Control failed:", errData.error);
+            return;
+        }
+    } catch (err) {
+        console.error("Network error during music control:", err);
+    }
+
+    // Refresh the UI state shortly after the command
+    setTimeout(updateMusicState, 600);
 }
 
 /* ================= LIVE SYNCED LYRICS ================= */
