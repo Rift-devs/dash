@@ -89,9 +89,9 @@
 
             <div class="content-scroll-area">
                 <section id="music" class="tab-pane active">
-                    <div class="music-layout">
+                    <div class="music-layout" id="musicLayout">
                         
-                        <div class="player-main glass">
+                        <div class="player-main glass" id="panelPlayer">
                             <div class="guild-selector">
                                 <div class="guild-dropdown" id="guildDropdown">
                                     <div class="guild-dropdown-selected" id="guildDropdownSelected" onclick="toggleGuildDropdown()">
@@ -195,7 +195,9 @@
                             </div>
                         </div>
 
-                        <div class="lyrics-panel glass">
+                        <div class="panel-resizer" id="resizerLeft" title="Drag to resize"></div>
+
+                        <div class="lyrics-panel glass" id="panelLyrics">
                             <div class="lyrics-header">
                                 <h3><i class="fa-solid fa-microphone-lines"></i> Live Lyrics</h3>
                                 <button class="btn-icon btn-sm" id="lyricsSearchToggle" onclick="toggleLyricsSearch()" title="Search Lyrics Manually">
@@ -211,7 +213,9 @@
                             </div>
                         </div>
 
-                        <div class="music-sidebar glass">
+                        <div class="panel-resizer" id="resizerRight" title="Drag to resize"></div>
+
+                        <div class="music-sidebar glass" id="panelQueue">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                                 <h3>Queue</h3>
                                 <button class="btn-icon btn-sm" onclick="musicControl('clear_queue')" title="Clear Queue">
@@ -240,6 +244,14 @@
                                     <span class="market-news-ticker" id="marketNewsTicker">Loading market news...</span>
                                 </div>
                                 <div class="stocks-header-right">
+                                    <div class="stocks-scope-selector">
+                                        <button class="scope-btn active" id="scopeGlobal" onclick="setStocksScope('global', this)">
+                                            <i class="fa-solid fa-globe"></i> Global
+                                        </button>
+                                        <button class="scope-btn" id="scopeServer" onclick="setStocksScope('server', this)">
+                                            <i class="fa-solid fa-server"></i> <span id="scopeServerLabel">Server</span>
+                                        </button>
+                                    </div>
                                     <div class="market-event-badge hidden" id="marketEventBadge">
                                         <i class="fa-solid fa-bolt"></i> <span id="marketEventName"></span>
                                     </div>
@@ -343,7 +355,13 @@
 
                             <!-- Leaderboard -->
                             <div class="glass stocks-leaderboard-card">
-                                <h3><i class="fa-solid fa-trophy"></i> Richest Users</h3>
+                                <div class="stocks-section-header">
+                                    <h3><i class="fa-solid fa-trophy"></i> Richest Users</h3>
+                                    <div class="lb-scope-btns">
+                                        <button class="lb-scope-btn active" data-scope="global" onclick="setLbScope('global',this)">Global</button>
+                                        <button class="lb-scope-btn" data-scope="server" onclick="setLbScope('server',this)">Server</button>
+                                    </div>
+                                </div>
                                 <div id="stocksLeaderboard" class="stocks-leaderboard">
                                     <div class="loading-shimmer"></div>
                                 </div>

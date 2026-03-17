@@ -199,19 +199,18 @@ function initWebSocket() {
 }
 
 function updateStats(data) {
-    document.getElementById('stat-servers').textContent = data.servers;
-    document.getElementById('stat-users').textContent = data.users;
-    document.getElementById('stat-ping').textContent = `${data.latency}ms`;
-    
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    const setStyle = (id, prop, val) => { const el = document.getElementById(id); if (el) el.style[prop] = val; };
+    set('stat-servers', data.servers);
+    set('stat-users', data.users);
+    set('stat-ping', `${data.latency}ms`);
     const h = Math.floor(data.uptime / 3600);
     const m = Math.floor((data.uptime % 3600) / 60);
-    document.getElementById('stat-uptime').textContent = `${h}h ${m}m`;
-    
-    document.getElementById('stat-cpu').textContent = `${data.cpu}%`;
-    document.getElementById('cpu-progress').style.width = `${data.cpu}%`;
-    
-    document.getElementById('stat-ram').textContent = `${data.ram_percent}%`;
-    document.getElementById('ram-progress').style.width = `${data.ram_percent}%`;
+    set('stat-uptime', `${h}h ${m}m`);
+    set('stat-cpu', `${data.cpu}%`);
+    setStyle('cpu-progress', 'width', `${data.cpu}%`);
+    set('stat-ram', `${data.ram_percent}%`);
+    setStyle('ram-progress', 'width', `${data.ram_percent}%`);
 }
 
 /* ================= AUTHENTICATION ================= */
@@ -398,11 +397,11 @@ function updateVcStatusBar(voiceChannel) {
 
 function renderServerGrid(guilds) {
     const grid = document.getElementById('serverList');
+    if (!grid) return;
     grid.innerHTML = guilds.map(g => `
         <div class="glass" style="display:flex; flex-direction:column; align-items:center; gap:15px; text-align:center;">
             <img src="${g.icon ? `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png'}" style="width:64px; height:64px; border-radius:50%; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
             <div style="font-weight:600;">${g.name}</div>
-            <button class="login-btn" style="padding:8px 16px; font-size:12px;">Manage</button>
         </div>
     `).join('');
 }
@@ -793,3 +792,66 @@ setInterval(() => {
         updateMusicState();
     }
 }, 2500);
+/* ================= PANEL RESIZER ================= */
+(function initPanelResizers() {
+    function makeResizer(resizerId, leftPanelId, rightPanelId) {
+        const resizer   = document.getElementById(resizerId);
+        const leftPanel = document.getElementById(leftPanelId);
+        const rightPanel = document.getElementById(rightPanelId);
+        if (!resizer || !leftPanel || !rightPanel) return;
+
+        let startX, startLeftW, startRightW;
+
+        function onMouseDown(e) {
+            startX      = e.clientX;
+            startLeftW  = leftPanel.getBoundingClientRect().width;
+            startRightW = rightPanel.getBoundingClientRect().width;
+            resizer.classList.add('dragging');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            window.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('mouseup',   onMouseUp);
+        }
+
+        function onMouseMove(e) {
+            const dx = e.clientX - startX;
+            const newLeftW  = Math.max(280, startLeftW  + dx);
+            const newRightW = Math.max(200, startRightW - dx);
+            leftPanel.style.width  = `${newLeftW}px`;
+            rightPanel.style.width = `${newRightW}px`;
+            leftPanel.style.flex   = '0 0 auto';
+            rightPanel.style.flex  = '0 0 auto';
+        }
+
+        function onMouseUp() {
+            resizer.classList.remove('dragging');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup',   onMouseUp);
+        }
+
+        // Touch support
+        resizer.addEventListener('touchstart', e => {
+            startX      = e.touches[0].clientX;
+            startLeftW  = leftPanel.getBoundingClientRect().width;
+            startRightW = rightPanel.getBoundingClientRect().width;
+        }, { passive: true });
+
+        resizer.addEventListener('touchmove', e => {
+            const dx = e.touches[0].clientX - startX;
+            leftPanel.style.width  = `${Math.max(280, startLeftW  + dx)}px`;
+            rightPanel.style.width = `${Math.max(200, startRightW - dx)}px`;
+            leftPanel.style.flex   = '0 0 auto';
+            rightPanel.style.flex  = '0 0 auto';
+        }, { passive: true });
+
+        resizer.addEventListener('mousedown', onMouseDown);
+    }
+
+    // Wait for DOM
+    document.addEventListener('DOMContentLoaded', () => {
+        makeResizer('resizerLeft',  'panelPlayer', 'panelLyrics');
+        makeResizer('resizerRight', 'panelLyrics', 'panelQueue');
+    });
+})();

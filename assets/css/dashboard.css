@@ -209,12 +209,70 @@ body {
     letter-spacing: 1px;
 }
 
-/* Music Layout */
+/* Music Layout — flex so panels are resizable via drag handles */
 .music-layout {
-    display: grid;
-    grid-template-columns: 1fr 1fr 350px;
-    gap: 25px;
+    display: flex;
+    gap: 0;
     height: calc(100vh - 160px);
+    overflow: hidden;
+}
+
+/* Drag handle between panels */
+.panel-resizer {
+    width: 8px;
+    flex-shrink: 0;
+    cursor: col-resize;
+    background: transparent;
+    position: relative;
+    transition: background 0.2s;
+    z-index: 5;
+}
+
+.panel-resizer::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 2px;
+    height: 40px;
+    background: var(--glass-border);
+    border-radius: 2px;
+    transition: 0.2s;
+}
+
+.panel-resizer:hover::after,
+.panel-resizer.dragging::after {
+    background: var(--primary);
+    height: 60px;
+    box-shadow: 0 0 8px var(--primary-glow);
+}
+
+/* Each panel gets a flex basis and can be resized */
+#panelPlayer {
+    flex: 0 0 auto;
+    width: 35%;
+    min-width: 280px;
+    max-width: 60%;
+    margin-right: 0;
+    border-radius: 20px;
+    margin: 0 4px 0 0;
+}
+
+#panelLyrics {
+    flex: 1 1 auto;
+    min-width: 200px;
+    margin: 0 4px;
+    overflow: hidden;
+}
+
+#panelQueue {
+    flex: 0 0 auto;
+    width: 280px;
+    min-width: 200px;
+    max-width: 45%;
+    margin: 0 0 0 4px;
+    overflow: hidden;
 }
 
 .player-main {
@@ -2077,3 +2135,51 @@ input[type="range"]::-webkit-slider-thumb:hover {
     .portfolio-stat.highlight { grid-column: 1 / -1; }
     .lastfm-profile-inner { flex-direction: column; align-items: flex-start; }
 }
+
+/* ── Scope selector (Global/Server) ───────── */
+.stocks-scope-selector {
+    display: flex;
+    gap: 4px;
+}
+
+.scope-btn {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 5px 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: 0.2s;
+    font-family: 'Outfit', sans-serif;
+    white-space: nowrap;
+}
+
+.scope-btn:hover  { color: var(--text-main); border-color: rgba(255,255,255,0.2); }
+.scope-btn.active { background: var(--primary); border-color: var(--primary); color: white; }
+
+/* ── Leaderboard scope buttons ─────────────── */
+.lb-scope-btns {
+    display: flex;
+    gap: 4px;
+}
+
+.lb-scope-btn {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--glass-border);
+    border-radius: 6px;
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 8px;
+    cursor: pointer;
+    transition: 0.2s;
+    font-family: 'Outfit', sans-serif;
+}
+
+.lb-scope-btn:hover  { color: var(--text-main); }
+.lb-scope-btn.active { background: rgba(114,137,218,0.2); border-color: var(--primary); color: var(--primary); }

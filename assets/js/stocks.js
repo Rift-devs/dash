@@ -338,3 +338,56 @@ async function loadLeaderboard() {
             </div>`).join('');
     } catch(e) { console.error('[Stocks] leaderboard error:', e); }
 }
+
+/* ── Scope filter (Global / Server) ────────── */
+let currentStocksScope = 'global';
+let currentGuildIdForStocks = null;
+
+window.setStocksScope = function(scope, btn) {
+    currentStocksScope = scope;
+    document.querySelectorAll('.scope-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderMarketTable(filteredStocks());
+    if (selectedStockSymbol) {
+        const s = filteredStocks().find(x => x.symbol === selectedStockSymbol)
+                  || stocksData[0];
+        if (s) selectStockForChart(s.symbol);
+    }
+};
+
+function filteredStocks() {
+    if (currentStocksScope === 'server' && selectedGuildId) {
+        return stocksData.filter(s => s.guild_id === selectedGuildId || s.guild_id === String(selectedGuildId));
+    }
+    return stocksData;
+}
+
+// Keep guild in sync with music tab selection
+Object.defineProperty(window, 'selectedGuildId', {
+    get() { return window._selectedGuildId || null; },
+    set(v) {
+        window._selectedGuildId = v;
+        const label = document.getElementById('scopeServerLabel');
+        if (label && v) {
+            const item = document.querySelector(`.guild-dropdown-item[data-id="${v}"]`);
+            if (item) label.textContent = item.dataset.name || 'Server';
+        }
+    },
+    configurable: true,
+});
+
+/* ── Leaderboard scope ───────────────────────── */
+let currentLbScope = 'global';
+
+window.setLbScope = function(scope, btn) {
+    currentLbScope = scope;
+    document.querySelectorAll('.lb-scope-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    loadLeaderboard();
+};
+
+/* ── Quantity input live update ─────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+    const qtyInput = document.getElementById('tradeQty');
+    if (qtyInput) qtyInput.addEventListener('input', updateTradeCost);
+});
