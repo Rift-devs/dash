@@ -362,19 +362,15 @@ function filteredStocks() {
     return stocksData;
 }
 
-// Keep guild in sync with music tab selection
-Object.defineProperty(window, 'selectedGuildId', {
-    get() { return window._selectedGuildId || null; },
-    set(v) {
-        window._selectedGuildId = v;
-        const label = document.getElementById('scopeServerLabel');
-        if (label && v) {
-            const item = document.querySelector(`.guild-dropdown-item[data-id="${v}"]`);
-            if (item) label.textContent = item.dataset.name || 'Server';
-        }
-    },
-    configurable: true,
-});
+// Keep guild label in sync when server changes
+window._onGuildSelected = function(guildId) {
+    window._selectedGuildId = guildId;
+    const label = document.getElementById('scopeServerLabel');
+    if (label && guildId) {
+        const item = document.querySelector(`.guild-dropdown-item[data-id="${guildId}"]`);
+        if (item) label.textContent = item.dataset.name || 'Server';
+    }
+};
 
 /* ── Leaderboard scope ───────────────────────── */
 let currentLbScope = 'global';

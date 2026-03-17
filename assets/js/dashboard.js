@@ -289,6 +289,8 @@ async function fetchGuilds(token) {
 
         item.addEventListener('click', () => {
             selectedGuildId = g.id;
+            window._selectedGuildId = g.id;
+            if (typeof window._onGuildSelected === 'function') window._onGuildSelected(g.id);
 
             // Update selected display
             const selected = document.getElementById('guildDropdownSelected');

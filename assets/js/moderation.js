@@ -20,12 +20,13 @@ let modInitDone       = false;
 
 /* ── Init ─────────────────────────────────── */
 window.initModeration = async function() {
-    modGuildId = window._selectedGuildId || selectedGuildId || null;
+    modGuildId = window._selectedGuildId || window.selectedGuildId || modGuildId || null;
+    if (!API_BASE) return;
+
     if (!modGuildId) {
-        showModHint('Select a server first (Music tab → server dropdown).');
+        showModHint('Select a server first using the dropdown on the Music tab, then come back here.');
         return;
     }
-    if (!API_BASE) return;
 
     await Promise.all([
         loadModStats(),
@@ -142,6 +143,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function fetchAutocomplete(q) {
+    modGuildId = modGuildId || window._selectedGuildId || window.selectedGuildId || null;
     if (!API_BASE || !modGuildId) return;
     try {
         const res = await fetch(`${API_BASE}/mod/members/${modGuildId}?q=${encodeURIComponent(q)}`, {
@@ -183,9 +185,24 @@ window.selectAutocomplete = function(id, name) {
 
 window.lookupUser = async function() {
     const q = document.getElementById('modUserInput').value.trim();
-    if (!q || !API_BASE || !modGuildId) return;
+    if (!q) return;
+
+    // Always grab the freshest guild id
+    modGuildId = modGuildId || window._selectedGuildId || window.selectedGuildId || null;
 
     const profile = document.getElementById('modUserProfile');
+
+    if (!API_BASE) {
+        profile.classList.remove('hidden');
+        profile.innerHTML = '<div class="mod-error"><i class="fa-solid fa-circle-exclamation"></i> API not connected — check bot is online</div>';
+        return;
+    }
+    if (!modGuildId) {
+        profile.classList.remove('hidden');
+        profile.innerHTML = '<div class="mod-error"><i class="fa-solid fa-circle-exclamation"></i> No server selected — go to Music tab and pick a server first</div>';
+        return;
+    }
+
     profile.classList.remove('hidden');
     profile.innerHTML = '<div class="mod-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Looking up...</div>';
 
