@@ -1090,3 +1090,254 @@ input[type="range"]::-webkit-slider-thumb:hover {
     background: #5b73c7;
     box-shadow: 0 0 10px var(--primary-glow);
 }
+
+/* ═══════════════════════════════════════════
+   MOBILE RESPONSIVE
+═══════════════════════════════════════════ */
+
+/* Hamburger button */
+.hamburger {
+    display: none;
+    background: none;
+    border: none;
+    color: var(--text-main);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 6px 8px;
+    border-radius: 8px;
+    transition: 0.2s;
+    flex-shrink: 0;
+}
+.hamburger:hover { background: var(--glass-bg); }
+
+/* Sidebar close button (mobile only) */
+.sidebar-close {
+    display: none;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 8px;
+    transition: 0.2s;
+    margin-left: auto;
+}
+.sidebar-close:hover { color: var(--text-main); background: var(--glass-bg); }
+
+/* Sidebar overlay */
+.sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 99;
+    backdrop-filter: blur(2px);
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+.sidebar-overlay.active {
+    display: block;
+    opacity: 1;
+}
+
+/* Mobile bottom tab bar */
+.mobile-tab-bar {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: rgba(14, 14, 18, 0.97);
+    border-top: 1px solid var(--glass-border);
+    z-index: 50;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+}
+
+.mobile-tab {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 10px;
+    font-family: 'Outfit', sans-serif;
+    cursor: pointer;
+    transition: 0.2s;
+    padding: 6px 0;
+}
+.mobile-tab i { font-size: 18px; transition: 0.2s; }
+.mobile-tab.active { color: var(--primary); }
+.mobile-tab.active i { text-shadow: 0 0 10px var(--primary-glow); }
+
+/* Top bar left group */
+.top-bar-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+/* ─── Breakpoint: tablet (≤1024px) ─── */
+@media (max-width: 1024px) {
+    .music-layout {
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: auto auto;
+        height: auto;
+    }
+    .music-sidebar {
+        grid-column: 1 / -1;
+    }
+    .content-scroll-area {
+        padding: 0 20px 40px;
+    }
+    .top-bar {
+        padding: 20px 24px;
+    }
+}
+
+/* ─── Breakpoint: mobile (≤768px) ─── */
+@media (max-width: 768px) {
+    /* Body needs room for bottom tab bar */
+    body { overflow: hidden; }
+
+    /* Sidebar slides in from left */
+    .sidebar {
+        position: fixed;
+        left: -280px;
+        top: 0;
+        bottom: 0;
+        width: 260px;
+        z-index: 100;
+        transition: left 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+        padding: 20px 16px;
+    }
+    .sidebar.open { left: 0; }
+    .sidebar-close { display: block; }
+    .sidebar-header .logo { margin-bottom: 30px; }
+
+    /* Show hamburger */
+    .hamburger { display: flex; }
+
+    /* Glass container no longer flex-row */
+    .glass-container { flex-direction: column; }
+
+    /* Top bar compact */
+    .top-bar {
+        padding: 14px 16px;
+    }
+    .top-bar h1 { font-size: 18px; }
+
+    /* Content area — account for top bar + bottom tabs */
+    .content-scroll-area {
+        padding: 0 12px 70px;
+        overflow-y: auto;
+        height: calc(100vh - 60px - 60px);
+    }
+
+    /* Stack music layout to single column */
+    .music-layout {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto;
+        gap: 16px;
+        height: auto;
+    }
+
+    /* Show bottom tab bar */
+    .mobile-tab-bar {
+        display: flex;
+    }
+
+    /* Panels: player always shows first, others hidden until tab selected */
+    .lyrics-panel,
+    .music-sidebar {
+        display: none;
+    }
+    .player-main {
+        display: flex;
+    }
+
+    /* Player panel adjustments */
+    .player-main {
+        padding: 16px;
+        border-radius: 16px;
+    }
+
+    /* Album art smaller on mobile */
+    .now-playing {
+        gap: 16px;
+        flex-direction: row;
+        align-items: center;
+    }
+    .album-art {
+        width: 90px;
+        height: 90px;
+        border-radius: 14px;
+        font-size: 36px;
+        flex-shrink: 0;
+    }
+    .track-details h2 { font-size: 17px; }
+    .track-details p  { font-size: 13px; }
+
+    /* Controls tighter */
+    .player-controls { gap: 14px; }
+    .control-buttons { gap: 16px; }
+    .btn-main { width: 48px; height: 48px; font-size: 18px; }
+    .btn-icon.btn-sm { font-size: 17px; }
+
+    /* Hide tooltips on touch devices */
+    .ctrl-tooltip { display: none; }
+
+    /* Volume row compact */
+    .volume-control { max-width: 100%; }
+
+    /* Search input full width */
+    .music-search-container { margin: 10px 0 16px; }
+
+    /* Lyrics panel full height when shown */
+    .lyrics-panel {
+        flex-direction: column;
+        height: calc(100vh - 130px);
+        border-radius: 16px;
+    }
+    .lyrics-container {
+        flex-grow: 1;
+        padding: 10% 10px 40% 10px;
+    }
+
+    /* Queue panel full height when shown */
+    .music-sidebar {
+        flex-direction: column;
+        height: calc(100vh - 130px);
+        border-radius: 16px;
+        padding: 16px;
+    }
+
+    /* VC prompt wraps on small screens */
+    .vc-auto-prompt-inner {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    /* Guild dropdown full width */
+    .guild-dropdown { width: 100%; }
+
+    /* System status text hidden on tiny screens */
+    @media (max-width: 380px) {
+        #connectionStatus { display: none; }
+        .top-bar h1 { font-size: 16px; }
+    }
+}
+
+/* ─── Touch: larger tap targets ─── */
+@media (hover: none) {
+    .btn-icon { min-width: 40px; min-height: 40px; }
+    .queue-item { padding: 14px; }
+    .search-item { padding: 12px 15px; }
+    .guild-dropdown-item { padding: 12px 15px; }
+}
