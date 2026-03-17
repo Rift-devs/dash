@@ -38,6 +38,10 @@
                     <i class="fa-solid fa-headphones"></i>
                     <span>Last.fm</span>
                 </li>
+                <li data-tab="moderation">
+                    <i class="fa-solid fa-shield-halved"></i>
+                    <span>Moderation</span>
+                </li>
                 <li class="nav-coming-soon" data-tab="">
                     <i class="fa-solid fa-sliders"></i>
                     <span>Settings</span>
@@ -453,14 +457,251 @@
                     </div>
                 </section>
 
+                <!-- ══════════════════════════════════════ -->
+                <!--  MODERATION TAB                        -->
+                <!-- ══════════════════════════════════════ -->
+                <section id="moderation" class="tab-pane">
+                    <div class="mod-layout">
+
+                        <!-- LEFT COLUMN -->
+                        <div class="mod-left">
+
+                            <!-- Overview Stats -->
+                            <div class="mod-stats-row" id="modStatsRow">
+                                <div class="mod-stat-card glass">
+                                    <i class="fa-solid fa-gavel"></i>
+                                    <div><span class="mod-stat-val" id="modTotalCases">—</span><span class="mod-stat-label">Total Cases</span></div>
+                                </div>
+                                <div class="mod-stat-card glass">
+                                    <i class="fa-solid fa-triangle-exclamation"></i>
+                                    <div><span class="mod-stat-val" id="modTotalWarns">—</span><span class="mod-stat-label">Warns</span></div>
+                                </div>
+                                <div class="mod-stat-card glass">
+                                    <i class="fa-solid fa-hammer"></i>
+                                    <div><span class="mod-stat-val" id="modTotalBans">—</span><span class="mod-stat-label">Bans</span></div>
+                                </div>
+                                <div class="mod-stat-card glass">
+                                    <i class="fa-solid fa-clock"></i>
+                                    <div><span class="mod-stat-val" id="modTotalTimeouts">—</span><span class="mod-stat-label">Timeouts</span></div>
+                                </div>
+                                <div class="mod-stat-card glass">
+                                    <i class="fa-solid fa-shoe-prints"></i>
+                                    <div><span class="mod-stat-val" id="modTotalKicks">—</span><span class="mod-stat-label">Kicks</span></div>
+                                </div>
+                            </div>
+
+                            <!-- Activity chart -->
+                            <div class="glass mod-activity-card">
+                                <div class="mod-section-header">
+                                    <span class="mod-section-label"><i class="fa-solid fa-chart-bar"></i> 7-Day Activity</span>
+                                </div>
+                                <canvas id="modActivityChart" height="100"></canvas>
+                            </div>
+
+                            <!-- User Lookup -->
+                            <div class="glass mod-lookup-card">
+                                <div class="mod-section-header">
+                                    <span class="mod-section-label"><i class="fa-solid fa-user-magnifying-glass"></i> User Lookup</span>
+                                </div>
+                                <div class="mod-search-row">
+                                    <div class="mod-search-wrap">
+                                        <i class="fa-solid fa-magnifying-glass"></i>
+                                        <input type="text" id="modUserInput" placeholder="@mention, ID, or username..." autocomplete="off">
+                                        <div class="mod-autocomplete hidden" id="modAutocomplete"></div>
+                                    </div>
+                                    <button class="mod-lookup-btn" onclick="lookupUser()">
+                                        <i class="fa-solid fa-search"></i> Lookup
+                                    </button>
+                                </div>
+
+                                <!-- User profile result -->
+                                <div id="modUserProfile" class="mod-user-profile hidden">
+                                    <div class="mod-user-header">
+                                        <img id="modUserAvatar" src="" alt="" class="mod-user-avatar">
+                                        <div class="mod-user-info">
+                                            <div class="mod-user-name-row">
+                                                <span class="mod-user-display" id="modUserDisplay"></span>
+                                                <span class="mod-user-tag" id="modUserTag"></span>
+                                                <span class="mod-user-id" id="modUserId"></span>
+                                            </div>
+                                            <div class="mod-user-badges" id="modUserBadges"></div>
+                                            <div class="mod-user-dates" id="modUserDates"></div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Roles strip -->
+                                    <div class="mod-user-roles" id="modUserRoles"></div>
+
+                                    <!-- Warn/history tabs -->
+                                    <div class="mod-user-tabs">
+                                        <button class="mod-user-tab active" data-panel="warns" onclick="switchUserTab('warns',this)">
+                                            <i class="fa-solid fa-triangle-exclamation"></i> Warnings <span class="mod-tab-count" id="modWarnCount"></span>
+                                        </button>
+                                        <button class="mod-user-tab" data-panel="history" onclick="switchUserTab('history',this)">
+                                            <i class="fa-solid fa-clock-rotate-left"></i> History
+                                        </button>
+                                        <button class="mod-user-tab" data-panel="notes" onclick="switchUserTab('notes',this)">
+                                            <i class="fa-solid fa-note-sticky"></i> Notes <span class="mod-tab-count" id="modNoteCount"></span>
+                                        </button>
+                                    </div>
+                                    <div id="modUserPanelWarns" class="mod-user-panel active">
+                                        <div id="modWarnsList" class="mod-warns-list"></div>
+                                    </div>
+                                    <div id="modUserPanelHistory" class="mod-user-panel">
+                                        <div id="modHistoryList" class="mod-history-list"></div>
+                                    </div>
+                                    <div id="modUserPanelNotes" class="mod-user-panel">
+                                        <div id="modNotesList" class="mod-notes-list"></div>
+                                        <div class="mod-add-note-row">
+                                            <input type="text" id="modNoteInput" placeholder="Add a note..." class="mod-note-input">
+                                            <button onclick="addNote()" class="mod-note-btn"><i class="fa-solid fa-plus"></i></button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- RIGHT COLUMN -->
+                        <div class="mod-right">
+
+                            <!-- Action Panel -->
+                            <div class="glass mod-action-card">
+                                <div class="mod-section-header">
+                                    <span class="mod-section-label"><i class="fa-solid fa-bolt"></i> Quick Actions</span>
+                                </div>
+
+                                <div class="mod-target-row">
+                                    <span class="mod-target-label">Target:</span>
+                                    <div class="mod-target-display" id="modActionTarget" onclick="document.getElementById('modUserInput').focus()">
+                                        No user selected
+                                    </div>
+                                </div>
+
+                                <!-- Action buttons grid -->
+                                <div class="mod-action-grid">
+                                    <button class="mod-action-btn warn"     onclick="openActionModal('warn')">
+                                        <i class="fa-solid fa-triangle-exclamation"></i> Warn
+                                    </button>
+                                    <button class="mod-action-btn timeout"  onclick="openActionModal('timeout')">
+                                        <i class="fa-solid fa-clock"></i> Timeout
+                                    </button>
+                                    <button class="mod-action-btn kick"     onclick="openActionModal('kick')">
+                                        <i class="fa-solid fa-shoe-prints"></i> Kick
+                                    </button>
+                                    <button class="mod-action-btn ban"      onclick="openActionModal('ban')">
+                                        <i class="fa-solid fa-hammer"></i> Ban
+                                    </button>
+                                    <button class="mod-action-btn unban"    onclick="openActionModal('unban')">
+                                        <i class="fa-solid fa-unlock"></i> Unban
+                                    </button>
+                                    <button class="mod-action-btn untimeout" onclick="openActionModal('untimeout')">
+                                        <i class="fa-solid fa-clock-rotate-left"></i> Untimeout
+                                    </button>
+                                    <button class="mod-action-btn role-add" onclick="openActionModal('role_add')">
+                                        <i class="fa-solid fa-circle-plus"></i> Add Role
+                                    </button>
+                                    <button class="mod-action-btn role-remove" onclick="openActionModal('role_remove')">
+                                        <i class="fa-solid fa-circle-minus"></i> Remove Role
+                                    </button>
+                                    <button class="mod-action-btn nick"     onclick="openActionModal('nick')">
+                                        <i class="fa-solid fa-pen"></i> Nickname
+                                    </button>
+                                    <button class="mod-action-btn clearwarns" onclick="openActionModal('clearwarns')">
+                                        <i class="fa-solid fa-eraser"></i> Clear Warns
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Ban list -->
+                            <div class="glass mod-bans-card">
+                                <div class="mod-section-header">
+                                    <span class="mod-section-label"><i class="fa-solid fa-ban"></i> Ban List</span>
+                                    <button class="btn-icon btn-sm" onclick="loadBanList()" title="Refresh">
+                                        <i class="fa-solid fa-rotate-right"></i>
+                                    </button>
+                                </div>
+                                <div class="mod-bans-search">
+                                    <input type="text" id="banSearchInput" placeholder="Search bans..." oninput="filterBans(this.value)">
+                                </div>
+                                <div id="modBanList" class="mod-ban-list">
+                                    <div class="loading-shimmer"></div>
+                                </div>
+                            </div>
+
+                            <!-- Top moderators -->
+                            <div class="glass mod-leaderboard-card">
+                                <div class="mod-section-label"><i class="fa-solid fa-star"></i> Top Moderators</div>
+                                <div id="modTopMods" class="mod-top-mods">
+                                    <div class="loading-shimmer"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- FULL-WIDTH LOG -->
+                        <div class="mod-log-section glass">
+                            <div class="mod-section-header mod-log-header">
+                                <span class="mod-section-label"><i class="fa-solid fa-scroll"></i> Mod Log</span>
+                                <div class="mod-log-filters">
+                                    <select id="modLogTypeFilter" onchange="applyLogFilters()" class="mod-filter-select">
+                                        <option value="">All Actions</option>
+                                        <option value="ban">Bans</option>
+                                        <option value="kick">Kicks</option>
+                                        <option value="warn">Warns</option>
+                                        <option value="timeout">Timeouts</option>
+                                        <option value="unban">Unbans</option>
+                                        <option value="note">Notes</option>
+                                    </select>
+                                    <input type="text" id="modLogUserFilter" placeholder="Filter by user..." class="mod-filter-input" oninput="debounceLogFilter()">
+                                    <button class="mod-filter-clear" onclick="clearLogFilters()">
+                                        <i class="fa-solid fa-xmark"></i> Clear
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="modLogList" class="mod-log-list">
+                                <div class="loading-shimmer"></div>
+                            </div>
+                            <div class="mod-log-pagination">
+                                <button class="mod-page-btn" id="modLogPrev" onclick="changeLogPage(-1)" disabled>
+                                    <i class="fa-solid fa-chevron-left"></i> Prev
+                                </button>
+                                <span id="modLogPageInfo">Page 1</span>
+                                <button class="mod-page-btn" id="modLogNext" onclick="changeLogPage(1)">
+                                    Next <i class="fa-solid fa-chevron-right"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
             </div>
         </main>
+    </div>
+
+    <!-- Action Modal -->
+    <div class="mod-modal-overlay hidden" id="modModalOverlay" onclick="closeActionModal()">
+        <div class="mod-modal glass" onclick="event.stopPropagation()">
+            <div class="mod-modal-header">
+                <span id="modModalTitle">Action</span>
+                <button class="mod-modal-close" onclick="closeActionModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="mod-modal-body">
+                <div class="mod-modal-target" id="modModalTarget"></div>
+                <div id="modModalFields"></div>
+                <input type="text" id="modModalReason" placeholder="Reason (optional)..." class="mod-modal-reason">
+                <div class="mod-modal-buttons">
+                    <button class="mod-modal-cancel" onclick="closeActionModal()">Cancel</button>
+                    <button class="mod-modal-confirm" id="modModalConfirm" onclick="confirmAction()">Confirm</button>
+                </div>
+                <div id="modModalResult" class="mod-modal-result hidden"></div>
+            </div>
+        </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="assets/js/dashboard.js"></script>
     <script src="assets/js/stocks.js"></script>
     <script src="assets/js/lastfm.js"></script>
+    <script src="assets/js/moderation.js"></script>
     <script>
         function openSidebar() {
             document.getElementById('sidebar').classList.add('open');

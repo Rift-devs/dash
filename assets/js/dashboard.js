@@ -169,6 +169,7 @@ function initTabs() {
 
             if (target === 'stocks' && typeof window.initStocks === 'function') window.initStocks();
             if (target === 'lastfm' && typeof window.initLastfm === 'function') window.initLastfm();
+            if (target === 'moderation' && typeof window.initModeration === 'function') window.initModeration();
 
             if (window.innerWidth <= 768) closeSidebar();
         });
