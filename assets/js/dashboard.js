@@ -277,26 +277,158 @@ async function fetchProfile(token) {
         });
         userProfile = await res.json();
 
-        if (userProfile.id) {
-            hideLoginWall();
-        } else {
+        if (!userProfile.id) {
             localStorage.removeItem('d_token');
             showLoginWall();
             return;
         }
-        
-        document.getElementById('userCard').innerHTML = `
-            <div class="user-info" style="display:flex; align-items:center; gap:12px;">
-                <img src="https://cdn.discordapp.com/avatars/${userProfile.id}/${userProfile.avatar}.png" style="width:32px; height:32px; border-radius:50%; border: 1px solid rgba(255,255,255,0.1)">
-                <span style="font-weight:500;">${userProfile.username}</span>
-            </div>
-        `;
+
+        hideLoginWall();
+        renderUserCard(userProfile);
         fetchGuilds(token);
     } catch (e) {
         localStorage.removeItem('d_token');
         showLoginWall();
     }
 }
+
+function renderUserCard(u) {
+    const avatar = u.avatar
+        ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.${u.avatar.startsWith('a_') ? 'gif' : 'png'}?size=128`
+        : `https://cdn.discordapp.com/embed/avatars/${parseInt(u.id) % 5}.png`;
+
+    const statusColor = '#23a559'; // online green — we show them as online since they're here
+
+    document.getElementById('userCard').innerHTML = `
+        <div class="sidebar-user-card" onclick="toggleProfilePopup()" id="sidebarUserTrigger">
+            <div class="sidebar-user-avatar-wrap">
+                <img src="${avatar}" class="sidebar-user-avatar" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                <span class="sidebar-user-status"></span>
+            </div>
+            <div class="sidebar-user-info">
+                <span class="sidebar-user-name">${escProfile(u.global_name || u.username)}</span>
+                <span class="sidebar-user-tag">@${escProfile(u.username)}</span>
+            </div>
+            <button class="sidebar-logout-btn" onclick="event.stopPropagation(); logout()" title="Log out">
+                <i class="fa-solid fa-right-from-bracket"></i>
+            </button>
+        </div>
+    `;
+
+    buildProfilePopup(u, avatar);
+}
+
+function buildProfilePopup(u, avatar) {
+    // Remove old popup if exists
+    const old = document.getElementById('discordProfilePopup');
+    if (old) old.remove();
+
+    const banner = u.banner
+        ? `https://cdn.discordapp.com/banners/${u.id}/${u.banner}.${u.banner.startsWith('a_') ? 'gif' : 'png'}?size=480`
+        : null;
+
+    const accentColor = u.accent_color
+        ? `#${u.accent_color.toString(16).padStart(6, '0')}`
+        : '#7289da';
+
+    const badges = buildBadges(u);
+    const nitroSince = u.premium_type > 0 ? getNitroLabel(u.premium_type) : null;
+
+    const popup = document.createElement('div');
+    popup.id = 'discordProfilePopup';
+    popup.className = 'discord-profile-popup hidden';
+    popup.innerHTML = `
+        <div class="dpp-banner" style="${banner
+            ? `background-image:url(${banner})`
+            : `background-color:${accentColor}`}">
+        </div>
+        <div class="dpp-avatar-row">
+            <div class="dpp-avatar-wrap">
+                <img src="${avatar}" class="dpp-avatar" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                <span class="dpp-status-dot"></span>
+            </div>
+            ${badges ? `<div class="dpp-badges">${badges}</div>` : ''}
+        </div>
+        <div class="dpp-body">
+            <div class="dpp-name">${escProfile(u.global_name || u.username)}</div>
+            <div class="dpp-username">@${escProfile(u.username)}${u.discriminator && u.discriminator !== '0' ? '#' + u.discriminator : ''}</div>
+            ${nitroSince ? `<div class="dpp-nitro"><i class="fa-solid fa-gem"></i> ${nitroSince}</div>` : ''}
+            <div class="dpp-divider"></div>
+            <div class="dpp-section-label">MEMBER SINCE</div>
+            <div class="dpp-since">${getDiscordMemberSince(u.id)}</div>
+            <div class="dpp-divider"></div>
+            <button class="dpp-logout-btn" onclick="logout()">
+                <i class="fa-solid fa-right-from-bracket"></i> Log Out
+            </button>
+        </div>
+    `;
+    document.body.appendChild(popup);
+
+    // Close on outside click
+    document.addEventListener('click', function _close(e) {
+        if (!e.target.closest('#discordProfilePopup') && !e.target.closest('#sidebarUserTrigger')) {
+            popup.classList.add('hidden');
+            document.removeEventListener('click', _close);
+        }
+    });
+}
+
+function buildBadges(u) {
+    const flags = u.public_flags || 0;
+    const badges = [];
+    if (flags & (1 << 0))  badges.push('<span class="dpp-badge" title="Discord Staff">🛡️</span>');
+    if (flags & (1 << 2))  badges.push('<span class="dpp-badge" title="HypeSquad Bravery">🏠</span>');
+    if (flags & (1 << 6))  badges.push('<span class="dpp-badge" title="HypeSquad Brilliance">💎</span>');
+    if (flags & (1 << 7))  badges.push('<span class="dpp-badge" title="HypeSquad Balance">⚖️</span>');
+    if (flags & (1 << 3))  badges.push('<span class="dpp-badge" title="Early Supporter">🏷️</span>');
+    if (flags & (1 << 17)) badges.push('<span class="dpp-badge" title="Bug Hunter">🐛</span>');
+    if (flags & (1 << 14)) badges.push('<span class="dpp-badge" title="Bug Hunter Gold">🏅</span>');
+    if (flags & (1 << 18)) badges.push('<span class="dpp-badge" title="Active Developer">💻</span>');
+    if (u.premium_type > 0) badges.push('<span class="dpp-badge" title="Nitro">💜</span>');
+    return badges.join('');
+}
+
+function getNitroLabel(type) {
+    if (type === 1) return 'Nitro Classic';
+    if (type === 2) return 'Nitro';
+    if (type === 3) return 'Nitro Basic';
+    return 'Nitro';
+}
+
+function getDiscordMemberSince(userId) {
+    // Snowflake timestamp
+    const ms = (BigInt(userId) >> 22n) + 1420070400000n;
+    return new Date(Number(ms)).toLocaleDateString('en', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function escProfile(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+window.toggleProfilePopup = function() {
+    const popup = document.getElementById('discordProfilePopup');
+    if (!popup) return;
+    popup.classList.toggle('hidden');
+    if (!popup.classList.contains('hidden')) {
+        // Position above the user card
+        const trigger = document.getElementById('sidebarUserTrigger');
+        const rect = trigger.getBoundingClientRect();
+        popup.style.bottom = (window.innerHeight - rect.top + 8) + 'px';
+        popup.style.left = rect.left + 'px';
+    }
+};
+
+window.logout = function() {
+    localStorage.removeItem('d_token');
+    userProfile = null;
+    const popup = document.getElementById('discordProfilePopup');
+    if (popup) popup.remove();
+    document.getElementById('userCard').innerHTML = `
+        <button class="login-btn" onclick="login()">
+            <i class="fa-brands fa-discord"></i> Login
+        </button>`;
+    showLoginWall();
+};
 
 async function fetchGuilds(token) {
     const res = await fetch('https://discord.com/api/users/@me/guilds', {
