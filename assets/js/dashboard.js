@@ -243,7 +243,7 @@ async function searchMusic(query) {
     try {
         const res = await fetch(`${API_BASE}/music/search`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
             body: JSON.stringify({ query })
         });
         const data = await res.json();
@@ -291,7 +291,9 @@ async function updateMusicState() {
     if (!selectedGuildId) return;
     
     try {
-        const res = await fetch(`${API_BASE}/music/state/${selectedGuildId}`);
+        const res = await fetch(`${API_BASE}/music/state/${selectedGuildId}`, {
+            headers: { 'ngrok-skip-browser-warning': 'true' }
+        });
         const data = await res.json();
         
         if (data.current) {
@@ -375,7 +377,7 @@ async function musicControl(action, value = null) {
     try {
         const response = await fetch(`${API_BASE}/music/control`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
             body: JSON.stringify(payload)
         });
 
