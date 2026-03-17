@@ -203,8 +203,16 @@ window.lookupUser = async function() {
         return;
     }
 
+    // Show spinner without destroying child elements
     profile.classList.remove('hidden');
-    profile.innerHTML = '<div class="mod-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Looking up...</div>';
+    const spinner = document.createElement('div');
+    spinner.id = 'modLookupSpinner';
+    spinner.className = 'mod-loading';
+    spinner.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Looking up...';
+    // Insert spinner at top, hide the real content
+    const existingContent = profile.querySelector('.mod-user-header');
+    if (existingContent) existingContent.style.display = 'none';
+    profile.prepend(spinner);
 
     try {
         const res = await fetch(`${API_BASE}/mod/user/${modGuildId}?q=${encodeURIComponent(q)}`, {
@@ -217,57 +225,85 @@ window.lookupUser = async function() {
         }
         modCurrentUser = data;
         modActionTarget = data.user;
+        // Remove spinner, restore content
+        const spinner = document.getElementById('modLookupSpinner');
+        if (spinner) spinner.remove();
+        const existingContent = profile.querySelector('.mod-user-header');
+        if (existingContent) existingContent.style.display = '';
         renderUserProfile(data);
         updateActionTarget(data.user);
     } catch(e) {
-        profile.innerHTML = '<div class="mod-error">Network error</div>';
+        console.error('[Mod] lookupUser error:', e);
+        const spinner = document.getElementById('modLookupSpinner');
+        if (spinner) spinner.remove();
+        profile.classList.remove('hidden');
+        // Show error without destroying the DOM structure
+        let errEl = document.getElementById('modLookupError');
+        if (!errEl) {
+            errEl = document.createElement('div');
+            errEl.id = 'modLookupError';
+            errEl.className = 'mod-error';
+            profile.prepend(errEl);
+        }
+        errEl.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> ${e.message || 'Network error — is the bot online?'}`;
+        setTimeout(() => errEl?.remove(), 4000);
     }
 };
 
 function renderUserProfile(data) {
     const u = data.user;
     const profile = document.getElementById('modUserProfile');
-    profile.innerHTML = ''; // clear loading
+    profile.classList.remove('hidden');
 
     // Avatar
-    document.getElementById('modUserAvatar').src = u.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
-    document.getElementById('modUserDisplay').textContent = u.name;
-    document.getElementById('modUserTag').textContent = `@${u.username}`;
-    document.getElementById('modUserId').textContent   = u.id;
+    const avatarEl = document.getElementById('modUserAvatar');
+    if (avatarEl) avatarEl.src = u.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
+
+    const displayEl = document.getElementById('modUserDisplay');
+    if (displayEl) displayEl.textContent = u.name;
+
+    const tagEl = document.getElementById('modUserTag');
+    if (tagEl) tagEl.textContent = `@${u.username}`;
+
+    const idEl = document.getElementById('modUserId');
+    if (idEl) idEl.textContent = u.id;
 
     // Badges
     const badgesEl = document.getElementById('modUserBadges');
-    badgesEl.innerHTML = '';
-    if (u.is_banned)   badgesEl.innerHTML += '<span class="mod-badge banned">BANNED</span>';
-    if (u.timed_out)   badgesEl.innerHTML += '<span class="mod-badge timed-out">TIMED OUT</span>';
-    if (!u.in_guild)   badgesEl.innerHTML += '<span class="mod-badge not-in">NOT IN SERVER</span>';
-    if (u.bot)         badgesEl.innerHTML += '<span class="mod-badge bot">BOT</span>';
-    if (data.warn_count > 0) badgesEl.innerHTML += `<span class="mod-badge warns">${data.warn_count} WARN${data.warn_count !== 1 ? 'S':''}</span>`;
+    if (badgesEl) {
+        badgesEl.innerHTML = '';
+        if (u.is_banned)      badgesEl.innerHTML += '<span class="mod-badge banned">BANNED</span>';
+        if (u.timed_out)      badgesEl.innerHTML += '<span class="mod-badge timed-out">TIMED OUT</span>';
+        if (!u.in_guild)      badgesEl.innerHTML += '<span class="mod-badge not-in">NOT IN SERVER</span>';
+        if (u.bot)            badgesEl.innerHTML += '<span class="mod-badge bot">BOT</span>';
+        if (data.warn_count > 0) badgesEl.innerHTML += `<span class="mod-badge warns">${data.warn_count} WARN${data.warn_count !== 1 ? 'S':''}</span>`;
+    }
 
     // Dates
     const datesEl = document.getElementById('modUserDates');
-    const created = u.created_at ? new Date(u.created_at * 1000).toLocaleDateString('en', {day:'numeric', month:'short', year:'numeric'}) : '?';
-    const joined  = u.joined_at  ? new Date(u.joined_at  * 1000).toLocaleDateString('en', {day:'numeric', month:'short', year:'numeric'}) : 'Not in server';
-    datesEl.innerHTML = `<span><i class="fa-brands fa-discord"></i> Created ${created}</span><span><i class="fa-solid fa-door-open"></i> Joined ${joined}</span>`;
+    if (datesEl) {
+        const created = u.created_at ? new Date(u.created_at * 1000).toLocaleDateString('en', {day:'numeric', month:'short', year:'numeric'}) : '?';
+        const joined  = u.joined_at  ? new Date(u.joined_at  * 1000).toLocaleDateString('en', {day:'numeric', month:'short', year:'numeric'}) : 'Not in server';
+        datesEl.innerHTML = `<span><i class="fa-brands fa-discord"></i> Created ${created}</span><span><i class="fa-solid fa-door-open"></i> Joined ${joined}</span>`;
+    }
 
     // Roles
     const rolesEl = document.getElementById('modUserRoles');
-    if (data.roles?.length) {
-        rolesEl.innerHTML = data.roles.slice(0, 12).map(r =>
-            `<span class="mod-role-chip" style="border-color:${r.color === '#000000' ? '#555' : r.color}">${escMod(r.name)}</span>`
-        ).join('') + (data.roles.length > 12 ? `<span class="mod-role-chip muted">+${data.roles.length - 12} more</span>` : '');
-    } else {
-        rolesEl.innerHTML = '<span class="mod-role-chip muted">No roles</span>';
+    if (rolesEl) {
+        if (data.roles?.length) {
+            rolesEl.innerHTML = data.roles.slice(0, 12).map(r =>
+                `<span class="mod-role-chip" style="border-color:${r.color === '#000000' ? '#555' : r.color}">${escMod(r.name)}</span>`
+            ).join('') + (data.roles.length > 12 ? `<span class="mod-role-chip muted">+${data.roles.length - 12} more</span>` : '');
+        } else {
+            rolesEl.innerHTML = '<span class="mod-role-chip muted">No roles</span>';
+        }
     }
 
-    // Restore the HTML structure that was cleared by inner html replace
-    profile.classList.remove('hidden');
-    // Re-show the profile inner elements (they were already in DOM, just need to restore)
-    const inner = document.getElementById('modUserProfile');
-    // The elements are preserved in the DOM since we only set innerHTML on loading state
-    // Just make sure tabs reset
-    document.getElementById('modWarnCount').textContent  = data.warn_count || '';
-    document.getElementById('modNoteCount').textContent  = data.notes?.length || '';
+    // Tab counts
+    const warnCount = document.getElementById('modWarnCount');
+    const noteCount = document.getElementById('modNoteCount');
+    if (warnCount) warnCount.textContent = data.warn_count || '';
+    if (noteCount) noteCount.textContent = data.notes?.length || '';
 
     renderWarns(data.warnings || []);
     renderHistory(data.history || []);
