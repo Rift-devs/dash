@@ -1,32 +1,43 @@
-// Configuration — API_BASE is set via ?api= query param (printed by bot on startup)
-// and persisted in localStorage so it survives page refreshes.
-const CLIENT_ID = "1329184069426348052";
+// Configuration
+// API_BASE is discovered automatically via JSONBin — works for all users on rift.baby
+const CLIENT_ID   = "1329184069426348052";
+const JSONBIN_BIN_ID  = "YOUR_BIN_ID_HERE";  // ← paste your JSONBin bin ID
+const JSONBIN_API_KEY = "YOUR_API_KEY_HERE";  // ← paste your JSONBin API key
 let API_BASE = null;
-let WS_URL = null;
+let WS_URL   = null;
 
 async function loadConfig() {
-    // 1. Check for ?api= in the URL (bot prints this link on every startup)
-    const params = new URLSearchParams(window.location.search);
-    const apiParam = params.get('api');
-    if (apiParam) {
-        localStorage.setItem('rift_api_base', apiParam);
-        // Clean the param from the URL bar without reloading
-        window.history.replaceState({}, document.title, window.location.pathname);
-    }
-
-    // 2. Use stored value
-    const stored = localStorage.getItem('rift_api_base');
-    if (stored) {
-        API_BASE = stored.replace(/\/$/, '') + '/api';
-        WS_URL = stored.replace('https://', 'wss://').replace('http://', 'ws://').replace(/\/$/, '') + '/ws';
-        console.log(`[Config] API_BASE=${API_BASE}`);
+    // 1. Server-injected globals (when visiting the ngrok URL directly)
+    if (window.__RIFT_API_BASE__) {
+        API_BASE = window.__RIFT_API_BASE__;
+        WS_URL   = window.__RIFT_WS_URL__;
+        console.log(`[Config] API_BASE=${API_BASE} (server-injected)`);
         return;
     }
 
-    // 3. Nothing configured yet
-    console.warn('[Config] No API base set. Open the dashboard URL printed by the bot on startup.');
+    // 2. JSONBin — live URL pushed by bot on every startup, works for everyone
+    try {
+        const res = await fetch(
+            `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}/latest`,
+            { headers: { 'X-Access-Key': JSONBIN_API_KEY } }
+        );
+        if (res.ok) {
+            const data = await res.json();
+            const url  = data?.record?.api;
+            if (url) {
+                API_BASE = url.replace(/\/$/, '') + '/api';
+                WS_URL   = url.replace('https://', 'wss://').replace('http://', 'ws://').replace(/\/$/, '') + '/ws';
+                console.log(`[Config] API_BASE=${API_BASE} (JSONBin)`);
+                return;
+            }
+        }
+    } catch(e) {
+        console.warn('[Config] JSONBin fetch failed:', e.message);
+    }
+
+    console.warn('[Config] Bot may be offline or JSONBin not configured.');
     API_BASE = null;
-    WS_URL = null;
+    WS_URL   = null;
 }
 
 // State
