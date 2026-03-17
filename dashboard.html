@@ -106,9 +106,16 @@
                         
                         <div class="player-main glass">
                             <div class="guild-selector">
-                                <select id="musicGuildSelect">
-                                    <option value="">Select a Server</option>
-                                </select>
+                                <div class="guild-dropdown" id="guildDropdown">
+                                    <div class="guild-dropdown-selected" id="guildDropdownSelected" onclick="toggleGuildDropdown()">
+                                        <div class="guild-dropdown-placeholder">
+                                            <i class="fa-solid fa-server"></i>
+                                            <span>Select a Server</span>
+                                        </div>
+                                        <i class="fa-solid fa-chevron-down guild-dropdown-arrow"></i>
+                                    </div>
+                                    <div class="guild-dropdown-menu hidden" id="guildDropdownMenu"></div>
+                                </div>
                             </div>
 
                             <div class="music-search-container">

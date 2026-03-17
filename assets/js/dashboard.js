@@ -52,7 +52,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     checkAuth();
     
     // Music Event Listeners
-    document.getElementById('musicGuildSelect').addEventListener('change', (e) => {
+    document.getElementById('musicGuildSelect')?.addEventListener('change', (e) => {
         selectedGuildId = e.target.value;
         updateMusicState();
     });
@@ -241,17 +241,63 @@ async function fetchGuilds(token) {
     const guilds = await res.json();
     const adminGuilds = guilds.filter(g => (BigInt(g.permissions) & 0x8n) || (BigInt(g.permissions) & 0x20n));
     
-    const select = document.getElementById('musicGuildSelect');
-    select.innerHTML = '<option value="">Select a Server</option>';
-    
+    const menu = document.getElementById('guildDropdownMenu');
+    menu.innerHTML = '';
+
     adminGuilds.forEach(g => {
-        const opt = document.createElement('option');
-        opt.value = g.id;
-        opt.textContent = g.name;
-        select.appendChild(opt);
+        const iconUrl = g.icon
+            ? `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png`
+            : null;
+
+        const item = document.createElement('div');
+        item.className = 'guild-dropdown-item';
+        item.dataset.id = g.id;
+        item.dataset.name = g.name;
+        item.dataset.icon = iconUrl || '';
+        item.innerHTML = iconUrl
+            ? `<img src="${iconUrl}" alt="${g.name}">`
+            : `<div class="guild-initial">${g.name.charAt(0).toUpperCase()}</div>`;
+        item.innerHTML += `<span>${g.name}</span>`;
+
+        item.addEventListener('click', () => {
+            selectedGuildId = g.id;
+
+            // Update selected display
+            const selected = document.getElementById('guildDropdownSelected');
+            selected.innerHTML = iconUrl
+                ? `<div class="guild-dropdown-current"><img src="${iconUrl}" alt="${g.name}"><span>${g.name}</span></div>`
+                : `<div class="guild-dropdown-current"><div class="guild-initial">${g.name.charAt(0).toUpperCase()}</div><span>${g.name}</span></div>`;
+            selected.innerHTML += `<i class="fa-solid fa-chevron-down guild-dropdown-arrow"></i>`;
+
+            // Mark active
+            document.querySelectorAll('.guild-dropdown-item').forEach(el => el.classList.remove('active'));
+            item.classList.add('active');
+
+            closeGuildDropdown();
+            updateMusicState();
+        });
+
+        menu.appendChild(item);
     });
 
     renderServerGrid(adminGuilds);
+}
+
+function toggleGuildDropdown() {
+    const menu = document.getElementById('guildDropdownMenu');
+    const selected = document.getElementById('guildDropdownSelected');
+    const isOpen = !menu.classList.contains('hidden');
+    if (isOpen) {
+        closeGuildDropdown();
+    } else {
+        menu.classList.remove('hidden');
+        selected.classList.add('open');
+    }
+}
+
+function closeGuildDropdown() {
+    document.getElementById('guildDropdownMenu').classList.add('hidden');
+    document.getElementById('guildDropdownSelected').classList.remove('open');
 }
 
 function renderServerGrid(guilds) {
@@ -323,6 +369,9 @@ window.playSearchedTrack = function(uri) {
 document.addEventListener('click', (e) => {
     if (!e.target.closest('.music-search-container')) {
         document.getElementById('searchResults').classList.add('hidden');
+    }
+    if (!e.target.closest('.guild-dropdown')) {
+        closeGuildDropdown();
     }
 });
 
