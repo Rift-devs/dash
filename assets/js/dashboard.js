@@ -265,6 +265,15 @@ function renderServerGrid(guilds) {
     `).join('');
 }
 
+/* ================= HELPERS ================= */
+function formatTime(ms) {
+    if (!ms || isNaN(ms)) return '0:00';
+    const totalSec = Math.floor(ms / 1000);
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 /* ================= SEARCH ENGINE ================= */
 async function searchMusic(query) {
     if (!API_BASE) { console.warn('[Search] API_BASE not set — open the bot startup URL first'); return; }
