@@ -93,11 +93,31 @@
 
             <div class="content-scroll-area">
                 <section id="music" class="tab-pane active">
+
+                    <!-- Chosen For You bar -->
+                    <div class="cfy-bar glass" id="cfyBar">
+                        <div class="cfy-label">
+                            <i class="fa-solid fa-sparkles"></i>
+                            <span>Chosen For You</span>
+                        </div>
+                        <div class="cfy-scroll" id="cfyScroll">
+                            <div class="cfy-loading">
+                                <div class="cfy-skeleton"></div>
+                                <div class="cfy-skeleton"></div>
+                                <div class="cfy-skeleton"></div>
+                                <div class="cfy-skeleton"></div>
+                                <div class="cfy-skeleton"></div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="music-layout" id="musicLayout">
                         
                         <div class="player-main glass" id="panelPlayer">
-                            <div class="guild-selector">
-                                <div class="guild-dropdown" id="guildDropdown">
+
+                            <!-- Top row: server selector + fix button -->
+                            <div class="player-top-row">
+                                <div class="guild-dropdown" id="guildDropdown" style="flex:1">
                                     <div class="guild-dropdown-selected" id="guildDropdownSelected" onclick="toggleGuildDropdown()">
                                         <div class="guild-dropdown-placeholder">
                                             <i class="fa-solid fa-server"></i>
@@ -107,9 +127,13 @@
                                     </div>
                                     <div class="guild-dropdown-menu hidden" id="guildDropdownMenu"></div>
                                 </div>
+                                <button class="fix-audio-btn" onclick="openFixModal()" title="Fix audio issues">
+                                    <i class="fa-solid fa-wrench"></i>
+                                    <span>Fix</span>
+                                </button>
                             </div>
 
-                            <!-- Smart VC auto-select prompt (shown before server is selected) -->
+                            <!-- VC prompts -->
                             <div id="vcAutoPrompt" class="vc-auto-prompt hidden">
                                 <div class="vc-auto-prompt-inner">
                                     <i class="fa-solid fa-headphones-simple"></i>
@@ -125,8 +149,6 @@
                                     </button>
                                 </div>
                             </div>
-
-                            <!-- VC status bar (shown after server selected) -->
                             <div id="vcStatusBar" class="vc-status-bar hidden">
                                 <div id="vcConnected" class="vc-connected hidden">
                                     <span class="vc-dot"></span>
@@ -140,26 +162,30 @@
                                 </div>
                             </div>
 
+                            <!-- Search -->
                             <div class="music-search-container">
                                 <div class="search-box">
                                     <i class="fa-solid fa-magnifying-glass"></i>
                                     <input type="text" id="songSearchInput" placeholder="Search for a song or paste a URL..." autocomplete="off">
                                 </div>
-                                <div id="searchResults" class="search-results-dropdown hidden">
-                                    </div>
+                                <div id="searchResults" class="search-results-dropdown hidden"></div>
                             </div>
-                            
-                            <div class="now-playing">
-                                <div class="album-art" id="albumArt">
+
+                            <!-- Compact now playing -->
+                            <div class="now-playing-compact">
+                                <div class="album-art-compact" id="albumArt">
                                     <i class="fa-solid fa-compact-disc fa-spin-slow"></i>
                                 </div>
-                                <div class="track-details">
-                                    <h2 id="currentTrackTitle">Not Playing</h2>
+                                <div class="track-details-compact">
+                                    <div class="track-title-row">
+                                        <h2 id="currentTrackTitle">Not Playing</h2>
+                                    </div>
                                     <p id="currentTrackAuthor">Select a server to view status</p>
                                     <canvas id="waveformCanvas" class="waveform-canvas"></canvas>
                                 </div>
                             </div>
 
+                            <!-- Controls -->
                             <div class="player-controls">
                                 <div class="seek-bar-container">
                                     <span id="timeCurrent">0:00</span>
@@ -221,7 +247,7 @@
                         <div class="panel-resizer" id="resizerRight" title="Drag to resize"></div>
 
                         <div class="music-sidebar glass" id="panelQueue">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <div class="queue-header">
                                 <h3>Queue</h3>
                                 <button class="btn-icon btn-sm" onclick="musicControl('clear_queue')" title="Clear Queue">
                                     <i class="fa-solid fa-trash-can"></i>
@@ -741,6 +767,46 @@
 
             </div>
         </main>
+    </div>
+
+    <!-- Fix Audio Modal -->
+    <div class="mod-modal-overlay hidden" id="fixModalOverlay" onclick="closeFixModal()">
+        <div class="mod-modal glass fix-modal" onclick="event.stopPropagation()">
+            <div class="mod-modal-header">
+                <span><i class="fa-solid fa-wrench"></i> Audio Troubleshooter</span>
+                <button class="mod-modal-close" onclick="closeFixModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="fix-modal-body">
+                <p class="fix-modal-sub">Experiencing audio issues? Select a fix below.</p>
+                <div class="fix-options">
+                    <button class="fix-option-btn" onclick="runFix('region')">
+                        <div class="fix-option-icon"><i class="fa-solid fa-globe"></i></div>
+                        <div class="fix-option-info">
+                            <span class="fix-option-title">Optimize Region</span>
+                            <span class="fix-option-desc">Sets voice region to Automatic for lowest latency</span>
+                        </div>
+                        <i class="fa-solid fa-chevron-right fix-option-arrow"></i>
+                    </button>
+                    <button class="fix-option-btn" onclick="runFix('rejoin')">
+                        <div class="fix-option-icon"><i class="fa-solid fa-rotate"></i></div>
+                        <div class="fix-option-info">
+                            <span class="fix-option-title">Rejoin & Resume</span>
+                            <span class="fix-option-desc">Reconnects bot and restores queue and current song</span>
+                        </div>
+                        <i class="fa-solid fa-chevron-right fix-option-arrow"></i>
+                    </button>
+                    <button class="fix-option-btn" onclick="runFix('filters')">
+                        <div class="fix-option-icon"><i class="fa-solid fa-sliders"></i></div>
+                        <div class="fix-option-info">
+                            <span class="fix-option-title">Clear Filters</span>
+                            <span class="fix-option-desc">Removes EQ and effects that may cause audio glitches</span>
+                        </div>
+                        <i class="fa-solid fa-chevron-right fix-option-arrow"></i>
+                    </button>
+                </div>
+                <div id="fixResult" class="fix-result hidden"></div>
+            </div>
+        </div>
     </div>
 
     <!-- Action Modal -->

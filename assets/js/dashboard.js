@@ -476,8 +476,7 @@ async function fetchGuilds(token) {
 
             closeGuildDropdown();
             updateMusicState();
-
-            // Only check voice for the selected guild, not all guilds
+            loadChosenForYou();
             if (userProfile && API_BASE) checkUserVoiceInGuild(g.id, g.name);
         });
 
@@ -1060,12 +1059,133 @@ function animationLoop() {
     requestAnimationFrame(animationLoop);
 }
 
-// Poll backend state safely
+// Poll backend state — 7s is enough, animation loop handles smooth progress
 setInterval(() => {
     if (document.getElementById('music').classList.contains('active')) {
         updateMusicState();
     }
-}, 5000);
+}, 7000);
+
+/* ================= CHOSEN FOR YOU ================= */
+const CFY_SEEDS = [
+    { q: 'chill lofi beats', label: 'Lofi Chill' },
+    { q: 'phonk drift playlist', label: 'Phonk' },
+    { q: 'synthwave retrowave mix', label: 'Synthwave' },
+    { q: 'hype rap playlist 2024', label: 'Hype Rap' },
+    { q: 'bedroom pop indie playlist', label: 'Indie Pop' },
+    { q: 'dark ambient focus', label: 'Dark Ambient' },
+    { q: 'k-pop bops playlist', label: 'K-Pop' },
+    { q: 'hip hop boom bap classic', label: 'Boom Bap' },
+    { q: 'jazz coffee shop background', label: 'Jazz' },
+    { q: 'metal core heavy mix', label: 'Metal' },
+];
+
+async function loadChosenForYou() {
+    if (!API_BASE || !selectedGuildId) return;
+    const scroll = document.getElementById('cfyScroll');
+    if (!scroll) return;
+
+    // Pick 5 random seeds
+    const picks = [...CFY_SEEDS].sort(() => Math.random() - 0.5).slice(0, 5);
+    const results = [];
+
+    await Promise.all(picks.map(async (seed) => {
+        try {
+            const res = await fetch(`${API_BASE}/music/search`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+                body: JSON.stringify({ query: seed.q }),
+            });
+            const data = await res.json();
+            const tracks = data.results || [];
+            if (tracks.length) {
+                // Pick a random one from top 5
+                const t = tracks[Math.floor(Math.random() * Math.min(tracks.length, 5))];
+                results.push({ ...t, genre: seed.label });
+            }
+        } catch(_) {}
+    }));
+
+    if (!results.length) { scroll.innerHTML = '<div class="cfy-empty">No recommendations right now</div>'; return; }
+
+    scroll.innerHTML = results.map(t => `
+        <button class="cfy-card" onclick="playCfy('${escAttr(t.uri)}')">
+            <div class="cfy-art" style="${t.artwork ? `background-image:url(${t.artwork})` : 'background:rgba(114,137,218,0.2)'}">
+                ${t.artwork ? '' : '<i class="fa-solid fa-music"></i>'}
+                <div class="cfy-play-overlay"><i class="fa-solid fa-play"></i></div>
+            </div>
+            <div class="cfy-info">
+                <span class="cfy-track">${escQueue(t.title)}</span>
+                <span class="cfy-artist">${escQueue(t.author)}</span>
+                <span class="cfy-genre">${t.genre}</span>
+            </div>
+        </button>`).join('');
+}
+
+window.playCfy = function(uri) {
+    if (!uri) return;
+    musicControl('play', uri);
+    showMusicToast('Added to queue');
+};
+
+function escAttr(s) { return String(s||'').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+
+function showMusicToast(msg) {
+    let t = document.getElementById('musicToast');
+    if (!t) {
+        t = document.createElement('div');
+        t.id = 'musicToast';
+        t.className = 'music-toast';
+        document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(t._t);
+    t._t = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+/* ================= FIX AUDIO MODAL ================= */
+window.openFixModal = function() {
+    document.getElementById('fixResult').classList.add('hidden');
+    document.getElementById('fixModalOverlay').classList.remove('hidden');
+};
+
+window.closeFixModal = function() {
+    document.getElementById('fixModalOverlay').classList.add('hidden');
+};
+
+window.runFix = async function(type) {
+    if (!selectedGuildId || !API_BASE) return;
+    const resultEl = document.getElementById('fixResult');
+    resultEl.textContent = 'Running...';
+    resultEl.className   = 'fix-result running';
+    resultEl.classList.remove('hidden');
+
+    // Disable all buttons while running
+    document.querySelectorAll('.fix-option-btn').forEach(b => b.disabled = true);
+
+    try {
+        const res = await fetch(`${API_BASE}/music/fix`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+            body: JSON.stringify({ guild_id: selectedGuildId, fix: type }),
+        });
+        const data = await res.json();
+        if (data.error) {
+            resultEl.textContent = `✗ ${data.error}`;
+            resultEl.className   = 'fix-result error';
+        } else {
+            resultEl.textContent = `✓ ${data.status}`;
+            resultEl.className   = 'fix-result success';
+            setTimeout(() => { closeFixModal(); updateMusicState(); }, 1800);
+        }
+    } catch(e) {
+        resultEl.textContent = '✗ Network error — is the bot online?';
+        resultEl.className   = 'fix-result error';
+    }
+
+    document.querySelectorAll('.fix-option-btn').forEach(b => b.disabled = false);
+};
 /* ================= PANEL RESIZER ================= */
 (function initPanelResizers() {
     function makeResizer(resizerId, leftPanelId, rightPanelId) {
