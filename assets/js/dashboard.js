@@ -1,7 +1,26 @@
-// Configuration
+// Configuration — loaded dynamically so a bot restart (new ngrok URL) never breaks the dashboard
 const CLIENT_ID = "1329184069426348052";
-const WS_URL = "wss://resentfully-unmourned-yasmine.ngrok-free.dev/ws";
-const API_BASE = "https://resentfully-unmourned-yasmine.ngrok-free.dev/api";
+let API_BASE = null;
+let WS_URL = null;
+
+async function loadConfig() {
+    try {
+        // api-config.json is written by web_server.py on every startup with the live ngrok URL
+        const res = await fetch('/api-config.json', { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const cfg = await res.json();
+        API_BASE = cfg.api_base;
+        WS_URL = cfg.ws_url;
+    } catch (e) {
+        // Fallback: assume we're being served directly by the bot (relative URLs)
+        console.warn('api-config.json not found, falling back to relative URLs:', e.message);
+        const proto = window.location.protocol;
+        const host = window.location.host;
+        API_BASE = `${proto}//${host}/api`;
+        WS_URL = `${proto === 'https:' ? 'wss' : 'ws'}://${host}/ws`;
+    }
+    console.log(`[Config] API_BASE=${API_BASE}`);
+}
 
 // State
 let ws = null;
@@ -18,7 +37,8 @@ let lyricsData = [];
 let activeLyricIndex = -1;
 
 // Initialization
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadConfig();
     initFallingStars();
     initTabs();
     initWebSocket();
@@ -241,12 +261,17 @@ function renderServerGrid(guilds) {
 /* ================= SEARCH ENGINE ================= */
 async function searchMusic(query) {
     try {
+        console.log(`[Search] Querying: "${query}"`);
+        console.log(`[Search] POST → ${API_BASE}/music/search`);
         const res = await fetch(`${API_BASE}/music/search`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
             body: JSON.stringify({ query })
         });
-        const data = await res.json();
+        console.log(`[Search] HTTP status: ${res.status} ${res.statusText}`);
+        const raw = await res.text();
+        console.log(`[Search] Raw response:`, raw);
+        const data = JSON.parse(raw);
         const resultsBox = document.getElementById('searchResults');
         
         if (data.results && data.results.length > 0) {
@@ -266,7 +291,7 @@ async function searchMusic(query) {
             resultsBox.classList.remove('hidden');
         }
     } catch (e) {
-        console.error("Search failed");
+        console.error("[Search] FAILED:", e.name, e.message, e);
     }
 }
 
@@ -324,7 +349,7 @@ async function updateMusicState() {
         
         renderQueue(data.queue);
     } catch (e) {
-        console.error("Music state update failed");
+        console.error("Music state update failed:", e);
     }
 }
 
