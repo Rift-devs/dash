@@ -1,8 +1,8 @@
 // Configuration
 // API_BASE is discovered automatically via JSONBin — works for all users on rift.baby
 const CLIENT_ID   = "1329184069426348052";
-const JSONBIN_BIN_ID  = "YOUR_BIN_ID_HERE";  // ← paste your JSONBin bin ID
-const JSONBIN_API_KEY = "YOUR_API_KEY_HERE";  // ← paste your JSONBin API key
+const JSONBIN_BIN_ID  = "69b98a6aaa77b81da9f28e54";
+const JSONBIN_API_KEY = "$2a$10$NTt2jhqyyVlb8/PbL7kJu.NVeu9OcAanj0/D9bkWRNgOyhz9oSugi";
 let API_BASE = null;
 let WS_URL   = null;
 
