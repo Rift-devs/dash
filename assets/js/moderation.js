@@ -424,6 +424,8 @@ window.openActionModal = function(action) {
         untimeout: '↩️ Remove Timeout', role_add: '➕ Add Role',
         role_remove: '➖ Remove Role', nick: '✏️ Change Nickname',
         clearwarns: '🧹 Clear All Warnings',
+        forcenick: '🔒 Force Nickname',
+        forcenick_reset: '🔓 Release Force Nickname',
     };
     document.getElementById('modModalTitle').textContent = titles[action] || action;
 
@@ -477,6 +479,25 @@ window.openActionModal = function(action) {
         fields.innerHTML += `<input type="text" id="modModalNick" placeholder="New nickname (blank to reset)..." class="mod-modal-field-input">`;
     }
 
+    if (action === 'forcenick') {
+        fields.innerHTML += `
+            <input type="text" id="modModalNick" placeholder="Nickname to lock in place..." class="mod-modal-field-input" maxlength="32">
+            <div class="mod-modal-warning" style="margin-top:8px">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                This will lock the nickname and strip the user's ability to change it.
+                Use <b>Release Nick</b> to undo.
+            </div>`;
+    }
+
+    if (action === 'forcenick_reset') {
+        fields.innerHTML += `
+            <div class="mod-modal-warning" style="margin-top:8px;border-color:rgba(67,181,129,0.3);color:#3ba55d">
+                <i class="fa-solid fa-circle-info"></i>
+                This will remove the forced nickname and restore the user's nickname permissions
+                (if they had them before).
+            </div>`;
+    }
+
     if (action === 'role_add' || action === 'role_remove') {
         const opts = modRoles.map(r => `<option value="${r.id}">${escMod(r.name)}</option>`).join('');
         fields.innerHTML += `
@@ -491,9 +512,14 @@ window.openActionModal = function(action) {
 
     // Style confirm button
     const confirmBtn = document.getElementById('modModalConfirm');
-    const dangerActions = ['ban','kick','clearwarns'];
+    const dangerActions = ['ban','kick','clearwarns','forcenick'];
     confirmBtn.className = `mod-modal-confirm ${dangerActions.includes(action) ? 'danger' : ''}`;
-    confirmBtn.textContent = titles[action]?.split(' ').slice(1).join(' ') || 'Confirm';
+    const confirmLabels = {
+        forcenick: 'Lock Nickname',
+        forcenick_reset: 'Release Nickname',
+        clearwarns: 'Clear Warnings',
+    };
+    confirmBtn.textContent = confirmLabels[action] || titles[action]?.split(' ').slice(1).join(' ') || 'Confirm';
 
     document.getElementById('modModalResult').classList.add('hidden');
     document.getElementById('modModalReason').value = '';
@@ -536,6 +562,12 @@ window.confirmAction = async function() {
     const nick     = document.getElementById('modModalNick')?.value || '';
     const delDays  = parseInt(document.getElementById('modModalFields')?.dataset?.delDays || '0');
 
+    // Validate forcenick has a nickname
+    if (action === 'forcenick' && !nick.trim()) {
+        showModalResult('error', 'Enter a nickname to lock');
+        return;
+    }
+
     const confirmBtn = document.getElementById('modModalConfirm');
     confirmBtn.disabled = true;
     confirmBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
@@ -567,6 +599,8 @@ window.confirmAction = async function() {
         nick: '✓ Nickname updated',
         clearwarns: '✓ All warnings cleared',
         delwarn: '✓ Warning deleted',
+        forcenick: `✓ Nickname locked to "${nick}"`,
+        forcenick_reset: '✓ Force-nick released',
     };
     showModalResult('success', successMsgs[action] || '✓ Done');
 

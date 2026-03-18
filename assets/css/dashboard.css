@@ -5068,3 +5068,23 @@ input[type="range"]::-webkit-slider-thumb:hover {
     .mod-server-row .tab-guild-selected { max-width: 100%; }
     .stocks-header-right { flex-wrap: wrap; gap: 6px; }
 }
+
+/* ── ForceNick action buttons ──────────────── */
+.mod-action-btn.forcenick {
+    background: rgba(114,137,218,0.1);
+    border-color: rgba(114,137,218,0.25);
+    color: var(--primary);
+}
+.mod-action-btn.forcenick:hover {
+    background: rgba(114,137,218,0.2);
+    border-color: rgba(114,137,218,0.5);
+}
+.mod-action-btn.forcenick-reset {
+    background: rgba(67,181,129,0.08);
+    border-color: rgba(67,181,129,0.2);
+    color: var(--success);
+}
+.mod-action-btn.forcenick-reset:hover {
+    background: rgba(67,181,129,0.16);
+    border-color: rgba(67,181,129,0.4);
+}
