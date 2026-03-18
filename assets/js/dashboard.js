@@ -142,7 +142,11 @@ function initFallingStars() {
     }
 
     let frame = 0;
-    function draw() {
+    let _lastStarDraw = 0;
+    function draw(ts) {
+        requestAnimationFrame(draw);
+        if (ts - _lastStarDraw < 50) return; // ~20fps
+        _lastStarDraw = ts;
         ctx.clearRect(0, 0, width, height);
         frame++;
         for (let s of stars) {
@@ -157,7 +161,6 @@ function initFallingStars() {
             ctx.fillStyle = `rgba(255,255,255,${pulse})`;
             ctx.fill();
         }
-        requestAnimationFrame(draw);
     }
 
     window.addEventListener('resize', resize);
@@ -885,6 +888,7 @@ const _wv = {
     ctx: null, bars: [], animId: null,
     WIDTH: 0, HEIGHT: 0,
     NUM: 28,
+    _lastDraw: 0,
     init() {
         const canvas = document.getElementById('waveformCanvas');
         if (!canvas) return;
@@ -902,9 +906,15 @@ const _wv = {
         }));
         if (!this.animId) this._draw();
     },
-    _draw() {
-        this.animId = requestAnimationFrame(() => this._draw());
+    _draw(ts) {
+        this.animId = requestAnimationFrame(t => this._draw(t));
         if (!this.ctx) return;
+        // Throttle to 24fps and skip entirely when paused (bars settle instantly)
+        const now = ts || 0;
+        if (!isPlaying && now - this._lastDraw < 200) return;
+        if (isPlaying  && now - this._lastDraw < 42)  return; // ~24fps
+        this._lastDraw = now;
+
         const { ctx, WIDTH, HEIGHT, bars, NUM } = this;
         ctx.clearRect(0, 0, WIDTH, HEIGHT);
         const barW   = WIDTH / NUM;
@@ -1198,30 +1208,44 @@ function updateLyricsGlow() {
     }
 }
 
-/* ================= 60FPS ANIMATION ENGINE ================= */
-function animationLoop() {
-    if (isPlaying && currentTrackDuration > 0) {
-        const now = Date.now();
-        const delta = now - lastSyncTimestamp;
-        localTimeMs += delta;
-        lastSyncTimestamp = now;
+/* ================= 30FPS ANIMATION ENGINE ================= */
+// Cache DOM elements once — grabbing them every frame is expensive
+let _seekBar     = null;
+let _timeCurrent = null;
+let _lastFrame   = 0;
+const _FRAME_MS  = 1000 / 30; // 30fps is plenty for a progress bar
 
-        // Cap local time
-        if (localTimeMs > currentTrackDuration) localTimeMs = currentTrackDuration;
+function animationLoop(timestamp) {
+    // Throttle to 30fps
+    if (timestamp - _lastFrame >= _FRAME_MS) {
+        _lastFrame = timestamp;
 
-        // Update Progress Bar if user isn't holding it
-        if (!isSeeking) {
-            const percent = (localTimeMs / currentTrackDuration) * 100;
-            const seekBar = document.getElementById('seekBar');
-            seekBar.value = percent || 0;
-            updateRangeFill(seekBar);
-            document.getElementById('timeCurrent').textContent = formatTime(localTimeMs);
+        if (isPlaying && currentTrackDuration > 0) {
+            const now   = Date.now();
+            const delta = now - lastSyncTimestamp;
+            localTimeMs += delta;
+            lastSyncTimestamp = now;
+
+            if (localTimeMs > currentTrackDuration) localTimeMs = currentTrackDuration;
+
+            if (!isSeeking) {
+                if (!_seekBar)     _seekBar     = document.getElementById('seekBar');
+                if (!_timeCurrent) _timeCurrent = document.getElementById('timeCurrent');
+                const percent = (localTimeMs / currentTrackDuration) * 100;
+                if (_seekBar) { _seekBar.value = percent || 0; updateRangeFill(_seekBar); }
+                if (_timeCurrent) _timeCurrent.textContent = formatTime(localTimeMs);
+            }
+
+            updateLyricsGlow();
         }
-
-        updateLyricsGlow();
     }
     requestAnimationFrame(animationLoop);
 }
+
+// Pause the animation clock when the browser tab is hidden
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) lastSyncTimestamp = Date.now();
+});
 
 // Poll backend state — 7s is enough, animation loop handles smooth progress
 setInterval(() => {
