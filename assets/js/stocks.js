@@ -14,14 +14,15 @@ window.initStocks = async function() {
     await loadLeaderboard();
     if (userProfile) await loadPortfolio();
 
-    // Real-time refresh every 15s
+    // Poll every 45s — only when tab visible. Stock prices in a Discord bot
+    // don't need sub-minute precision; saves ~120 requests/hr per user.
     if (stocksRefreshInterval) clearInterval(stocksRefreshInterval);
     stocksRefreshInterval = setInterval(async () => {
-        if (document.getElementById('stocks').classList.contains('active')) {
+        if (!document.hidden && document.getElementById('stocks').classList.contains('active')) {
             await loadMarket();
             if (userProfile) await loadPortfolio();
         }
-    }, 15000);
+    }, 45000);
 };
 
 /* ── Market data ─────────────────────────── */
@@ -247,14 +248,16 @@ window.selectTradeStock = function(symbol, name, price) {
     document.getElementById('tradePriceDisplay').textContent = `Price: $${price.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
     document.getElementById('tradeDropdown').classList.add('hidden');
     updateTradeCost();
-    // Show owned
-    if (userProfile) {
-        fetch(`${API_BASE}/stocks/portfolio/${userProfile.id}`, { headers: { 'ngrok-skip-browser-warning': 'true' } })
-            .then(r => r.json()).then(data => {
-                const h = (data.holdings || []).find(x => x.symbol === symbol);
-                document.getElementById('tradeOwnedDisplay').textContent = `Owned: ${h ? h.qty : 0}`;
-            }).catch(() => {});
-    }
+    // Read owned count from already-loaded portfolio DOM — no extra fetch needed
+    const holdingEls = document.querySelectorAll('.portfolio-holding');
+    let owned = 0;
+    holdingEls.forEach(el => {
+        if (el.querySelector('.portfolio-holding-sym')?.textContent === symbol) {
+            const qty = el.querySelector('.portfolio-holding-qty')?.textContent || '0';
+            owned = parseInt(qty) || 0;
+        }
+    });
+    document.getElementById('tradeOwnedDisplay').textContent = `Owned: ${owned}`;
 };
 
 window.adjustQty = function(delta) {
@@ -320,23 +323,32 @@ function showTradeResult(type, msg) {
 /* ── Leaderboard ─────────────────────────── */
 async function loadLeaderboard() {
     if (!API_BASE) return;
+    const cacheKey = `stocksLb:${currentLbScope}`;
+    if (typeof _cache !== 'undefined') {
+        const cached = _cache.get(cacheKey);
+        if (cached) { _renderLeaderboard(cached); return; }
+    }
     try {
         const res = await fetch(`${API_BASE}/stocks/leaderboard`, { headers: { 'ngrok-skip-browser-warning': 'true' } });
         const data = await res.json();
-        const el = document.getElementById('stocksLeaderboard');
-        if (data.error || !data.leaderboard) { el.innerHTML = '<div class="market-empty">Unavailable</div>'; return; }
-
-        el.innerHTML = data.leaderboard.map((u, i) => `
-            <div class="leaderboard-row">
-                <span class="lb-rank">${['🥇','🥈','🥉'][i] || `#${i+1}`}</span>
-                <img class="lb-avatar" src="${u.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png'}" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
-                <span class="lb-name">${u.name}</span>
-                <div class="lb-values">
-                    <span class="lb-net">$${u.net_worth.toLocaleString()}</span>
-                    <span class="lb-breakdown">$${u.cash.toLocaleString()} cash + $${u.stock_value.toLocaleString()} stocks</span>
-                </div>
-            </div>`).join('');
+        if (typeof _cache !== 'undefined') _cache.set(cacheKey, data, 300000); // 5 min
+        _renderLeaderboard(data);
     } catch(e) { console.error('[Stocks] leaderboard error:', e); }
+}
+
+function _renderLeaderboard(data) {
+    const el = document.getElementById('stocksLeaderboard');
+    if (data.error || !data.leaderboard) { el.innerHTML = '<div class="market-empty">Unavailable</div>'; return; }
+    el.innerHTML = data.leaderboard.map((u, i) => `
+        <div class="leaderboard-row">
+            <span class="lb-rank">${['🥇','🥈','🥉'][i] || `#${i+1}`}</span>
+            <img class="lb-avatar" src="${u.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png'}" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+            <span class="lb-name">${u.name}</span>
+            <div class="lb-values">
+                <span class="lb-net">$${u.net_worth.toLocaleString()}</span>
+                <span class="lb-breakdown">$${u.cash.toLocaleString()} cash + $${u.stock_value.toLocaleString()} stocks</span>
+            </div>
+        </div>`).join('');
 }
 
 /* ── Scope filter (Global / Server) ────────── */

@@ -171,8 +171,10 @@ function initTabs() {
 /* ================= WEBSOCKET (STATS) ================= */
 function initWebSocket() {
     ws = new WebSocket(WS_URL);
+    let _wsRetryDelay = 3000;
     
     ws.onopen = () => {
+        _wsRetryDelay = 3000; // reset on successful connect
         document.getElementById('connectionStatus').textContent = "Connected";
         document.querySelector('.status-indicator').className = "status-indicator online";
     };
@@ -187,7 +189,9 @@ function initWebSocket() {
     ws.onclose = () => {
         document.getElementById('connectionStatus').textContent = "Reconnecting...";
         document.querySelector('.status-indicator').className = "status-indicator";
-        setTimeout(initWebSocket, 3000);
+        // Exponential backoff: 3s → 6s → 12s → 24s → cap at 30s
+        setTimeout(initWebSocket, _wsRetryDelay);
+        _wsRetryDelay = Math.min(_wsRetryDelay * 2, 30000);
     };
 }
 
@@ -454,10 +458,8 @@ async function fetchGuilds(token) {
             item.classList.add('active');
 
             closeGuildDropdown();
-            updateMusicState();
-            loadChosenForYou();
-            loadMusicHistory();
-            if (userProfile && API_BASE) checkUserVoiceInGuild(g.id, g.name);
+            // Debounced: batches all guild-change side-effects into one 150ms window
+            _onGuildSelectDebounced(g.id, g.name);
         });
 
         menu.appendChild(item);
@@ -549,18 +551,20 @@ let _vcPollInterval = null;
 
 async function checkUserVoiceInGuild(guildId, guildName) {
     if (!userProfile || !API_BASE) return;
+    const cacheKey = `voiceCheck:${guildId}:${userProfile.id}`;
+    const cached = _cache.get(cacheKey);
+    if (cached !== null) {
+        if (cached.in_voice) autoJoinUserVc(guildId, cached.channel_id, guildName, cached.channel_name, cached.member_count);
+        return;
+    }
     try {
         const res = await fetch(`${API_BASE}/user/voice/${guildId}/${userProfile.id}`, {
             headers: { 'ngrok-skip-browser-warning': 'true' }
         });
         const data = await res.json();
+        _cache.set(cacheKey, data, 90000); // 90s TTL
         if (data.in_voice) {
-            _autoVcGuildId     = guildId;
-            _autoVcChannelName = data.channel_name;
-            const members = data.member_count;
-
-            // Auto-join the channel immediately — no need for the user to click
-            autoJoinUserVc(guildId, data.channel_id, guildName, data.channel_name, members);
+            autoJoinUserVc(guildId, data.channel_id, guildName, data.channel_name, data.member_count);
         }
     } catch (_) {}
 }
@@ -656,6 +660,9 @@ function renderServerGrid(guilds) {
 /* ================= MUSIC HISTORY & TOP SONGS ================= */
 window.loadMusicHistory = async function() {
     if (!API_BASE || !selectedGuildId) return;
+    const cacheKey = `musicHistory:${selectedGuildId}`;
+    const cached = _cache.get(cacheKey);
+    if (cached) { renderRecentlyPlayed(cached.history); renderTopSongs(cached.top); return; }
     try {
         const [histRes, topRes] = await Promise.all([
             fetch(`${API_BASE}/music/history/${selectedGuildId}`, { headers: { 'ngrok-skip-browser-warning': 'true' } }),
@@ -663,8 +670,10 @@ window.loadMusicHistory = async function() {
         ]);
         const histData = await histRes.json();
         const topData  = await topRes.json();
-        renderRecentlyPlayed(histData.history || []);
-        renderTopSongs(topData.top || []);
+        const payload  = { history: histData.history || [], top: topData.top || [] };
+        _cache.set(cacheKey, payload, 120000); // 2 min TTL
+        renderRecentlyPlayed(payload.history);
+        renderTopSongs(payload.top);
     } catch(e) { console.error('[History]', e); }
 };
 
@@ -991,11 +1000,17 @@ function resetPlayer() {
     localTimeMs = 0;
 }
 
+// Coalesce rapid control actions (e.g. skip×3) into a single state refresh
+let _musicStateRefreshTimer = null;
+function _scheduleStateRefresh() {
+    clearTimeout(_musicStateRefreshTimer);
+    _musicStateRefreshTimer = setTimeout(updateMusicState, 800);
+}
+
 // Master API Controller
 async function musicControl(action, value = null) {
     if (!selectedGuildId) return;
 
-    // We send userProfile.id so the bot knows which VC to join
     const payload = { 
         guild_id: selectedGuildId, 
         user_id: userProfile ? userProfile.id : null, 
@@ -1019,8 +1034,8 @@ async function musicControl(action, value = null) {
         console.error("Network error during music control:", err);
     }
 
-    // Refresh the UI state shortly after the command
-    setTimeout(updateMusicState, 600);
+    // Coalesce: rapid button presses share one refresh instead of one each
+    _scheduleStateRefresh();
 }
 
 /* ================= CONTROL HELPERS ================= */
@@ -1214,14 +1229,42 @@ document.addEventListener('visibilitychange', () => {
     if (!document.hidden) lastSyncTimestamp = Date.now();
 });
 
-// Poll backend state — 7s is enough, animation loop handles smooth progress
-setInterval(() => {
-    if (document.getElementById('music').classList.contains('active')) {
+// Poll backend state — 20s is plenty; animation loop handles smooth progress bar.
+// Paused automatically when the browser tab is hidden (visibilitychange below).
+let _musicPollInterval = setInterval(() => {
+    if (!document.hidden && document.getElementById('music').classList.contains('active')) {
         updateMusicState();
     }
-}, 7000);
+}, 20000);
 
-/* ================= CHOSEN FOR YOU ================= */
+// ─── Client-side caches ────────────────────────────────────────────────────
+// Keyed by guildId. TTL in ms. Prevents repeat worker hits on guild re-select.
+const _cache = {
+    _store: {},
+    set(key, value, ttlMs = 60000) {
+        this._store[key] = { value, expires: Date.now() + ttlMs };
+    },
+    get(key) {
+        const entry = this._store[key];
+        if (!entry || Date.now() > entry.expires) return null;
+        return entry.value;
+    },
+    del(key) { delete this._store[key]; }
+};
+
+// Debounce guild-select side-effects so rapid clicks don't fire 8 requests each
+let _guildSelectTimer = null;
+function _onGuildSelectDebounced(guildId, guildName) {
+    clearTimeout(_guildSelectTimer);
+    _guildSelectTimer = setTimeout(() => {
+        updateMusicState();
+        loadChosenForYou();
+        loadMusicHistory();
+        if (userProfile && API_BASE) checkUserVoiceInGuild(guildId, guildName);
+    }, 150); // 150ms debounce — imperceptible to user
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 const CFY_FALLBACK_SEEDS = [
     { q: 'chill lofi beats', label: 'Lofi' },
     { q: 'phonk drift playlist', label: 'Phonk' },
@@ -1235,24 +1278,35 @@ async function loadChosenForYou() {
     const scroll = document.getElementById('cfyScroll');
     if (!scroll) return;
 
+    // Cache CFY per guild for 10 minutes — recommendations don't need to refresh on every guild click
+    const cacheKey = `cfy:${selectedGuildId}:${userProfile?.id || 'anon'}`;
+    const cached = _cache.get(cacheKey);
+    if (cached) { scroll.innerHTML = cached; return; }
+
     // Try to get personalised seeds from Last.fm top artists
     let seeds = [];
     if (userProfile?.id) {
-        try {
-            const res = await fetch(`${API_BASE}/lastfm/topartists/${userProfile.id}?period=1month`, {
-                headers: { 'ngrok-skip-browser-warning': 'true' }
-            });
-            const data = await res.json();
-            if (data.artists?.length) {
-                // Pick 5 random from top 10 to keep it fresh
-                const pool = data.artists.slice(0, 10);
-                const picked = pool.sort(() => Math.random() - 0.5).slice(0, 5);
-                seeds = picked.map(a => ({ q: a.name, label: a.name }));
-            }
-        } catch(_) {}
+        const lfmCacheKey = `lfmTopArtists:${userProfile.id}`;
+        let artists = _cache.get(lfmCacheKey);
+        if (!artists) {
+            try {
+                const res = await fetch(`${API_BASE}/lastfm/topartists/${userProfile.id}?period=1month`, {
+                    headers: { 'ngrok-skip-browser-warning': 'true' }
+                });
+                const data = await res.json();
+                if (data.artists?.length) {
+                    artists = data.artists;
+                    _cache.set(lfmCacheKey, artists, 600000); // 10 min
+                }
+            } catch(_) {}
+        }
+        if (artists?.length) {
+            const pool = artists.slice(0, 10);
+            const picked = pool.sort(() => Math.random() - 0.5).slice(0, 5);
+            seeds = picked.map(a => ({ q: a.name, label: a.name }));
+        }
     }
 
-    // Fall back to genre seeds if no Last.fm
     if (!seeds.length) seeds = [...CFY_FALLBACK_SEEDS].sort(() => Math.random() - 0.5).slice(0, 5);
 
     const results = [];
@@ -1274,7 +1328,7 @@ async function loadChosenForYou() {
 
     if (!results.length) { scroll.innerHTML = '<div class="cfy-empty">No recommendations right now</div>'; return; }
 
-    scroll.innerHTML = results.map(t => `
+    const html = results.map(t => `
         <button class="cfy-card" onclick="playCfy('${escAttr(t.uri)}')">
             <div class="cfy-art" style="${t.artwork ? `background-image:url(${t.artwork})` : 'background:rgba(114,137,218,0.2)'}">
                 ${t.artwork ? '' : '<i class="fa-solid fa-music"></i>'}
@@ -1286,6 +1340,9 @@ async function loadChosenForYou() {
                 <span class="cfy-genre">${t.genre}</span>
             </div>
         </button>`).join('');
+
+    _cache.set(cacheKey, html, 600000); // 10 min
+    scroll.innerHTML = html;
 }
 
 window.playCfy = function(uri) {

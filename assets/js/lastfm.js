@@ -10,42 +10,32 @@ let fmUserId = null;
 
 /* ── Init ─────────────────────────────────── */
 window.initLastfm = async function() {
-    if (!userProfile) {
-        showFmNotLinked();
-        return;
-    }
+    if (!userProfile) { showFmNotLinked(); return; }
     fmUserId = userProfile.id;
-
-    // Show loading state while waiting for API
     document.getElementById('lastfmProfileInner').classList.add('hidden');
-
-    // Wait up to 3s for API_BASE to be ready (Gist fetch may still be in progress)
     if (!API_BASE) {
         for (let i = 0; i < 6; i++) {
             await new Promise(r => setTimeout(r, 500));
             if (API_BASE) break;
         }
     }
+    if (!API_BASE) { showFmNotLinked(); return; }
 
-    if (!API_BASE) {
-        showFmNotLinked();
-        return;
-    }
-
+    // Profile and charts can be cached — they don't change every 20s
     await loadFmProfile();
     await loadFmNowPlaying();
-    await loadFmTopArtists();
-    await loadFmTopTracks();
-    loadFmGenres();    // non-blocking — slow API, runs in background
-    loadFmHeatmap();   // non-blocking
+    // Run charts in parallel — both are cacheable
+    await Promise.all([loadFmTopArtists(), loadFmTopTracks()]);
+    loadFmGenres();   // non-blocking
+    loadFmHeatmap();  // non-blocking
 
-    // Refresh now playing every 20s
+    // Poll nowplaying every 45s — only when tab is visible
     if (fmRefreshInterval) clearInterval(fmRefreshInterval);
     fmRefreshInterval = setInterval(async () => {
-        if (document.getElementById('lastfm').classList.contains('active')) {
+        if (!document.hidden && document.getElementById('lastfm').classList.contains('active')) {
             await loadFmNowPlaying();
         }
-    }, 20000);
+    }, 45000);
 };
 
 /* ── Period selector ─────────────────────── */
@@ -61,40 +51,41 @@ window.setFmPeriod = async function(period, btn) {
 /* ── Profile ─────────────────────────────── */
 async function loadFmProfile() {
     if (!API_BASE || !fmUserId) return;
+    // Profile barely changes — cache for 5 minutes
+    if (typeof _cache !== 'undefined') {
+        const cached = _cache.get(`fmProfile:${fmUserId}`);
+        if (cached) { _renderFmProfileData(cached); return; }
+    }
     try {
         const res = await fetch(`${API_BASE}/lastfm/profile/${fmUserId}`, {
             headers: { 'ngrok-skip-browser-warning': 'true' }
         });
         const data = await res.json();
         if (data.error) { showFmNotLinked(); return; }
-
-        document.getElementById('lastfmProfileInner').classList.remove('hidden');
-
-        const avatarEl = document.getElementById('lastfmAvatar');
-        avatarEl.src = data.avatar || 'https://lastfm.freetls.fastly.net/i/u/avatar170s/818148bf682d429dc215c1705eb27b98.png';
-        avatarEl.onerror = () => { avatarEl.src = 'https://lastfm.freetls.fastly.net/i/u/avatar170s/818148bf682d429dc215c1705eb27b98.png'; };
-
-        const badge = document.getElementById('lastfmScrobbleBadge');
-        badge.textContent = formatBigNum(data.playcount);
-
-        const link = document.getElementById('lastfmUsernameLink');
-        link.textContent = data.username;
-        link.href = data.url;
-
-        const countryEl = document.getElementById('lastfmCountry');
-        countryEl.textContent = data.country || '';
-
-        document.getElementById('lastfmPlaycount').textContent = formatBigNum(data.playcount);
-        document.getElementById('lastfmArtists').textContent   = formatBigNum(data.artist_count);
-        document.getElementById('lastfmTracks').textContent    = formatBigNum(data.track_count);
-        document.getElementById('lastfmAlbums').textContent    = formatBigNum(data.album_count);
-
-        // Member since
-        if (data.registered) {
-            const yr = new Date(data.registered * 1000).getFullYear();
-            countryEl.textContent = `${data.country ? data.country + ' · ' : ''}Since ${yr}`;
-        }
+        if (typeof _cache !== 'undefined') _cache.set(`fmProfile:${fmUserId}`, data, 300000);
+        _renderFmProfileData(data);
     } catch(e) { console.error('[LastFM] profile error:', e); showFmNotLinked(); }
+}
+
+function _renderFmProfileData(data) {
+    document.getElementById('lastfmProfileInner').classList.remove('hidden');
+    const avatarEl = document.getElementById('lastfmAvatar');
+    avatarEl.src = data.avatar || 'https://lastfm.freetls.fastly.net/i/u/avatar170s/818148bf682d429dc215c1705eb27b98.png';
+    avatarEl.onerror = () => { avatarEl.src = 'https://lastfm.freetls.fastly.net/i/u/avatar170s/818148bf682d429dc215c1705eb27b98.png'; };
+    document.getElementById('lastfmScrobbleBadge').textContent = formatBigNum(data.playcount);
+    const link = document.getElementById('lastfmUsernameLink');
+    link.textContent = data.username; link.href = data.url;
+    document.getElementById('lastfmPlaycount').textContent = formatBigNum(data.playcount);
+    document.getElementById('lastfmArtists').textContent   = formatBigNum(data.artist_count);
+    document.getElementById('lastfmTracks').textContent    = formatBigNum(data.track_count);
+    document.getElementById('lastfmAlbums').textContent    = formatBigNum(data.album_count);
+    const countryEl = document.getElementById('lastfmCountry');
+    if (data.registered) {
+        const yr = new Date(data.registered * 1000).getFullYear();
+        countryEl.textContent = `${data.country ? data.country + ' · ' : ''}Since ${yr}`;
+    } else {
+        countryEl.textContent = data.country || '';
+    }
 }
 
 function showFmNotLinked() {
@@ -162,12 +153,18 @@ function renderFmRecent(tracks) {
 /* ── Top Artists ─────────────────────────── */
 async function loadFmTopArtists() {
     if (!API_BASE || !fmUserId) return;
+    const cacheKey = `fmTopArtists:${fmUserId}:${fmPeriod}`;
+    if (typeof _cache !== 'undefined') {
+        const cached = _cache.get(cacheKey);
+        if (cached) { renderFmArtistsChart(cached); renderFmArtistsList(cached); return; }
+    }
     try {
         const res = await fetch(`${API_BASE}/lastfm/topartists/${fmUserId}?period=${fmPeriod}`, {
             headers: { 'ngrok-skip-browser-warning': 'true' }
         });
         const data = await res.json();
         if (data.error) return;
+        if (typeof _cache !== 'undefined') _cache.set(cacheKey, data.artists, 180000); // 3 min
         renderFmArtistsChart(data.artists);
         renderFmArtistsList(data.artists);
     } catch(e) { console.error('[LastFM] topartists error:', e); }
@@ -247,12 +244,18 @@ function renderFmArtistsList(artists) {
 /* ── Top Tracks ──────────────────────────── */
 async function loadFmTopTracks() {
     if (!API_BASE || !fmUserId) return;
+    const cacheKey = `fmTopTracks:${fmUserId}:${fmPeriod}`;
+    if (typeof _cache !== 'undefined') {
+        const cached = _cache.get(cacheKey);
+        if (cached) { renderFmTracksChart(cached); renderFmTracksList(cached); return; }
+    }
     try {
         const res = await fetch(`${API_BASE}/lastfm/toptracks/${fmUserId}?period=${fmPeriod}`, {
             headers: { 'ngrok-skip-browser-warning': 'true' }
         });
         const data = await res.json();
         if (data.error) return;
+        if (typeof _cache !== 'undefined') _cache.set(cacheKey, data.tracks, 180000); // 3 min
         renderFmTracksChart(data.tracks);
         renderFmTracksList(data.tracks);
     } catch(e) { console.error('[LastFM] toptracks error:', e); }

@@ -32,8 +32,12 @@ window.initSettings = async function() {
 };
 
 /* ── Load / Save prefs ───────────────────── */
+let _prefsLoaded = false;
+
 async function loadPrefs() {
-    // Load from server if logged in, fallback to localStorage
+    // Already loaded this session — don't re-fetch from the worker
+    if (_prefsLoaded && Object.keys(_prefs).length > 1) return;
+
     if (API_BASE && userProfile?.id) {
         try {
             const res = await fetch(`${API_BASE}/prefs/${userProfile.id}`, {
@@ -43,22 +47,24 @@ async function loadPrefs() {
             if (data && !data.error && Object.keys(data).length) {
                 _prefs = { ...DEFAULTS, ...data };
                 localStorage.setItem('rift_prefs', JSON.stringify(_prefs));
+                _prefsLoaded = true;
                 return;
             }
         } catch(e) {}
     }
-    // Fallback: localStorage
     try {
         const stored = localStorage.getItem('rift_prefs');
         _prefs = stored ? { ...DEFAULTS, ...JSON.parse(stored) } : { ...DEFAULTS };
     } catch(e) {
         _prefs = { ...DEFAULTS };
     }
+    _prefsLoaded = true;
 }
 
 function scheduleSave() {
     clearTimeout(_prefsSaveTimeout);
-    _prefsSaveTimeout = setTimeout(persistPrefs, 800);
+    // 2s debounce absorbs rapid slider drags — was 800ms, could fire 10+ saves per drag
+    _prefsSaveTimeout = setTimeout(persistPrefs, 2000);
 }
 
 async function persistPrefs() {
@@ -464,12 +470,18 @@ window.loadPlaylists = async function() {
             '<div class="pl-empty">Login to view playlists</div>';
         return;
     }
+    // Cache for 2 minutes — re-fetched automatically after mutations (create/delete/remove)
+    if (typeof _cache !== 'undefined') {
+        const cached = _cache.get(`playlists:${userProfile.id}`);
+        if (cached) { _playlists = cached; renderPlaylistList(); return; }
+    }
     try {
         const res = await fetch(`${API_BASE}/playlists/${userProfile.id}`, {
             headers: { 'ngrok-skip-browser-warning': 'true' }
         });
         const data = await res.json();
         _playlists = data.playlists || [];
+        if (typeof _cache !== 'undefined') _cache.set(`playlists:${userProfile.id}`, _playlists, 120000);
         renderPlaylistList();
     } catch(e) {
         document.getElementById('playlistList').innerHTML =
@@ -564,8 +576,11 @@ window.deletePlaylist = async function(name) {
             body: JSON.stringify({ name }),
         });
         const data = await res.json();
-        if (data.status === 'deleted') { showSettingsToast('Playlist deleted'); loadPlaylists(); }
-        else showSettingsToast(data.error || 'Failed', 'error');
+        if (data.status === 'deleted') {
+            if (typeof _cache !== 'undefined') _cache.del(`playlists:${userProfile.id}`);
+            showSettingsToast('Playlist deleted');
+            loadPlaylists();
+        } else showSettingsToast(data.error || 'Failed', 'error');
     } catch(e) { showSettingsToast('Network error', 'error'); }
 };
 
@@ -641,6 +656,7 @@ window.submitCreatePlaylist = async function() {
         });
         const data = await res.json();
         if (data.error) { result.textContent = data.error; result.className = 'fix-result error'; result.classList.remove('hidden'); return; }
+        if (typeof _cache !== 'undefined') _cache.del(`playlists:${userProfile.id}`);
         document.getElementById('createPlaylistModal').classList.add('hidden');
         showSettingsToast(`✓ "${name}" created`);
         loadPlaylists();

@@ -20,21 +20,20 @@ let modInitDone       = false;
 
 /* ── Init ─────────────────────────────────── */
 window.initModeration = async function() {
-    modGuildId = window._selectedGuildId || window.selectedGuildId || modGuildId || null;
+    const newGuildId = window._selectedGuildId || window.selectedGuildId || modGuildId || null;
     if (!API_BASE) return;
+    if (!newGuildId) { showModHint('Select a server using the dropdown above.'); return; }
 
-    if (!modGuildId) {
-        showModHint('Select a server using the dropdown above.');
-        return;
-    }
+    // Skip full re-init if same guild already loaded
+    if (modInitDone && newGuildId === modGuildId) return;
+    modGuildId = newGuildId;
 
-    await Promise.all([
-        loadModStats(),
-        loadModLog(),
-        loadBanList(),
-        loadRoles(),
-        loadServerAnalytics(),
-    ]);
+    // Stagger: load critical data first, then secondary data
+    await Promise.all([loadModStats(), loadModLog()]);
+    // Ban list and roles are cacheable and less urgent — load after
+    loadBanList();
+    loadRoles();
+    loadServerAnalytics();
     modInitDone = true;
 };
 
@@ -46,40 +45,43 @@ function showModHint(msg) {
 /* ── Stats & Activity Chart ──────────────── */
 async function loadModStats() {
     if (!API_BASE || !modGuildId) return;
+    const cacheKey = `modStats:${modGuildId}`;
+    if (typeof _cache !== 'undefined') {
+        const cached = _cache.get(cacheKey);
+        if (cached) { _renderModStats(cached); return; }
+    }
     try {
         const res = await fetch(`${API_BASE}/mod/stats/${modGuildId}`, {
             headers: { 'ngrok-skip-browser-warning': 'true' }
         });
         const data = await res.json();
         if (data.error) return;
-
-        // Stat cards
-        const set = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val ?? '0'; };
-        set('modTotalCases',    data.total);
-        set('modTotalWarns',    data.by_action?.warn    || 0);
-        set('modTotalBans',     data.by_action?.ban     || 0);
-        set('modTotalTimeouts', data.by_action?.timeout || 0);
-        set('modTotalKicks',    data.by_action?.kick    || 0);
-
-        // Top mods
-        const topEl = document.getElementById('modTopMods');
-        if (topEl && data.top_mods?.length) {
-            topEl.innerHTML = data.top_mods.map((m, i) => `
-                <div class="mod-top-mod-row">
-                    <span class="lb-rank">${['🥇','🥈','🥉'][i] || `#${i+1}`}</span>
-                    <img class="lb-avatar" src="${m.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png'}"
-                         onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
-                    <span class="mod-top-mod-name">${escMod(m.name)}</span>
-                    <span class="mod-top-mod-count">${m.count} actions</span>
-                </div>`).join('');
-        } else if (topEl) {
-            topEl.innerHTML = '<div class="mod-empty">No moderator data yet</div>';
-        }
-
-        // Activity chart
-        renderModActivityChart(data.activity_7d || {});
-
+        if (typeof _cache !== 'undefined') _cache.set(cacheKey, data, 120000); // 2 min
+        _renderModStats(data);
     } catch(e) { console.error('[Mod] stats error:', e); }
+}
+
+function _renderModStats(data) {
+    const set = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val ?? '0'; };
+    set('modTotalCases',    data.total);
+    set('modTotalWarns',    data.by_action?.warn    || 0);
+    set('modTotalBans',     data.by_action?.ban     || 0);
+    set('modTotalTimeouts', data.by_action?.timeout || 0);
+    set('modTotalKicks',    data.by_action?.kick    || 0);
+    const topEl = document.getElementById('modTopMods');
+    if (topEl && data.top_mods?.length) {
+        topEl.innerHTML = data.top_mods.map((m, i) => `
+            <div class="mod-top-mod-row">
+                <span class="lb-rank">${['🥇','🥈','🥉'][i] || `#${i+1}`}</span>
+                <img class="lb-avatar" src="${m.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png'}"
+                     onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                <span class="mod-top-mod-name">${escMod(m.name)}</span>
+                <span class="mod-top-mod-count">${m.count} actions</span>
+            </div>`).join('');
+    } else if (topEl) {
+        topEl.innerHTML = '<div class="mod-empty">No moderator data yet</div>';
+    }
+    renderModActivityChart(data.activity_7d || {});
 }
 
 function renderModActivityChart(buckets) {
@@ -651,6 +653,11 @@ async function modApiAction(action, targetId, reason, opts = {}, extra = {}) {
 /* ── Ban List ─────────────────────────────── */
 window.loadBanList = async function() {
     if (!API_BASE || !modGuildId) return;
+    const cacheKey = `modBans:${modGuildId}`;
+    if (typeof _cache !== 'undefined') {
+        const cached = _cache.get(cacheKey);
+        if (cached) { modAllBans = cached; renderBanList(modAllBans); return; }
+    }
     const el = document.getElementById('modBanList');
     el.innerHTML = '<div class="loading-shimmer"></div>';
     try {
@@ -659,6 +666,7 @@ window.loadBanList = async function() {
         });
         const data = await res.json();
         modAllBans = data.bans || [];
+        if (typeof _cache !== 'undefined') _cache.set(cacheKey, modAllBans, 180000); // 3 min
         renderBanList(modAllBans);
     } catch(e) { el.innerHTML = '<div class="mod-empty">Failed to load bans</div>'; }
 };
@@ -795,12 +803,18 @@ window.clearLogFilters = function() {
 /* ── Roles ───────────────────────────────── */
 async function loadRoles() {
     if (!API_BASE || !modGuildId) return;
+    const cacheKey = `modRoles:${modGuildId}`;
+    if (typeof _cache !== 'undefined') {
+        const cached = _cache.get(cacheKey);
+        if (cached) { modRoles = cached; return; }
+    }
     try {
         const res = await fetch(`${API_BASE}/mod/roles/${modGuildId}`, {
             headers: { 'ngrok-skip-browser-warning': 'true' }
         });
         const data = await res.json();
         modRoles = data.roles || [];
+        if (typeof _cache !== 'undefined') _cache.set(cacheKey, modRoles, 300000); // 5 min
     } catch(e) {}
 }
 
@@ -863,39 +877,37 @@ window.setAnalyticsRange = function(days, btn) {
 
 async function loadServerAnalytics() {
     if (!API_BASE || !modGuildId) return;
-
-    // Reset stat cards
+    const cacheKey = `analytics:${modGuildId}`;
+    if (typeof _cache !== 'undefined') {
+        const cached = _cache.get(cacheKey);
+        if (cached) { anaRawData = cached; renderAnalyticsCharts(cached); _renderAnalyticsCards(cached); return; }
+    }
     ['anaMembers','anaOnline','anaJoins','anaLeaves','anaMessages'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = '—';
+        const el = document.getElementById(id); if (el) el.textContent = '—';
     });
-
     try {
         const res = await fetch(`${API_BASE}/analytics/${modGuildId}`, {
             headers: { 'ngrok-skip-browser-warning': 'true' }
         });
         const data = await res.json();
         if (data.error) return;
-
+        if (typeof _cache !== 'undefined') _cache.set(cacheKey, data, 300000); // 5 min
         anaRawData = data;
-
-        // Server info badge
-        const infoEl = document.getElementById('analyticsServerInfo');
-        if (infoEl) infoEl.textContent = data.guild_name || '';
-
-        // Stat cards
-        const set = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val ?? '—'; };
-        set('anaMembers', (data.member_count || 0).toLocaleString());
-        set('anaOnline',  (data.online_count || 0).toLocaleString());
-
-        // Sum last 7 days
-        const last7 = (arr) => (arr || []).slice(-7).reduce((a, b) => a + b, 0);
-        set('anaJoins',    last7(data.joins).toLocaleString());
-        set('anaLeaves',   last7(data.leaves).toLocaleString());
-        set('anaMessages', last7(data.messages).toLocaleString());
-
+        _renderAnalyticsCards(data);
         renderAnalyticsCharts(data);
     } catch(e) { console.error('[Analytics]', e); }
+}
+
+function _renderAnalyticsCards(data) {
+    const infoEl = document.getElementById('analyticsServerInfo');
+    if (infoEl) infoEl.textContent = data.guild_name || '';
+    const set = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val ?? '—'; };
+    set('anaMembers', (data.member_count || 0).toLocaleString());
+    set('anaOnline',  (data.online_count || 0).toLocaleString());
+    const last7 = (arr) => (arr || []).slice(-7).reduce((a, b) => a + b, 0);
+    set('anaJoins',    last7(data.joins).toLocaleString());
+    set('anaLeaves',   last7(data.leaves).toLocaleString());
+    set('anaMessages', last7(data.messages).toLocaleString());
 }
 
 function renderAnalyticsCharts(data) {
