@@ -462,7 +462,7 @@ window._vcCallTabLeave = function () {
     clearInterval(_vcElapsedTimer);
 };
 
-/* ── VC Guild dropdown (mirrors music guild logic) ─────── */
+/* ── VC Guild dropdown ─────────────────────────────────── */
 window.toggleVcGuildDropdown = function () {
     const menu = document.getElementById('vcGuildDropdownMenu');
     if (!menu) return;
@@ -479,36 +479,60 @@ window.toggleVcGuildDropdown = function () {
     });
 };
 
-function _populateVcGuildMenu() {
+async function _populateVcGuildMenu() {
     const menu = document.getElementById('vcGuildDropdownMenu');
     if (!menu) return;
-    // Reuse the guilds from the music dropdown
-    const musicItems = document.querySelectorAll('#guildDropdownMenu .guild-dropdown-item');
-    if (!musicItems.length) {
-        menu.innerHTML = '<div style="padding:10px 14px;color:var(--text-muted);font-size:13px">No servers found</div>';
+
+    menu.innerHTML = '<div style="padding:10px 14px;color:var(--text-muted);font-size:13px">Loading…</div>';
+
+    const token = localStorage.getItem('d_token');
+    if (!token) {
+        menu.innerHTML = '<div style="padding:10px 14px;color:var(--text-muted);font-size:13px">Not logged in</div>';
         return;
     }
-    menu.innerHTML = '';
-    musicItems.forEach(item => {
-        const clone = item.cloneNode(true);
-        const guildId   = item.dataset.guildId;
-        const guildName = item.querySelector('.guild-dropdown-name')?.textContent || '';
-        const iconEl    = item.querySelector('img');
-        clone.onclick = () => {
-            _vcGuildId = guildId;
-            const sel = document.getElementById('vcGuildDropdownSelected');
-            if (sel) {
+
+    try {
+        const res = await fetch('https://discord.com/api/users/@me/guilds', {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        const guilds = await res.json();
+
+        if (!Array.isArray(guilds) || !guilds.length) {
+            menu.innerHTML = '<div style="padding:10px 14px;color:var(--text-muted);font-size:13px">No servers found</div>';
+            return;
+        }
+
+        menu.innerHTML = '';
+        guilds.forEach(g => {
+            const icon = g.icon
+                ? `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.webp?size=32`
+                : `https://cdn.discordapp.com/embed/avatars/0.png`;
+
+            const item = document.createElement('div');
+            item.className = 'guild-dropdown-item';
+            item.innerHTML = `
+                <img src="${icon}" style="width:22px;height:22px;border-radius:50%;object-fit:cover;flex-shrink:0"
+                     onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                <span class="guild-dropdown-name" style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(g.name)}</span>`;
+            item.onclick = () => {
+                _vcGuildId = g.id;
                 const txtEl = document.getElementById('vcGuildDropdownText');
-                if (txtEl) txtEl.textContent = guildName;
-                if (iconEl) {
+                if (txtEl) txtEl.textContent = g.name;
+                const sel = document.getElementById('vcGuildDropdownSelected');
+                if (sel) {
                     let img = sel.querySelector('img');
-                    if (!img) { img = document.createElement('img'); sel.prepend(img); }
-                    img.src = iconEl.src;
-                    img.style.cssText = 'width:20px;height:20px;border-radius:50%;margin-right:8px;vertical-align:middle';
+                    if (!img) {
+                        img = document.createElement('img');
+                        img.style.cssText = 'width:20px;height:20px;border-radius:50%;margin-right:8px;vertical-align:middle;flex-shrink:0';
+                        sel.prepend(img);
+                    }
+                    img.src = icon;
                 }
-            }
-            menu.classList.add('hidden');
-        };
-        menu.appendChild(clone);
-    });
+                menu.classList.add('hidden');
+            };
+            menu.appendChild(item);
+        });
+    } catch (e) {
+        menu.innerHTML = '<div style="padding:10px 14px;color:var(--text-muted);font-size:13px">Failed to load servers</div>';
+    }
 }
