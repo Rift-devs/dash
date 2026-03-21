@@ -367,26 +367,55 @@ async function _loadVcGuilds() {
     const menu = document.getElementById('vcGuildDropdownMenu');
     if (!menu) return;
     menu.innerHTML = '<div style="padding:10px 14px;color:var(--text-muted);font-size:13px">Loading…</div>';
+
+    const token = localStorage.getItem('d_token');
+    if (!token) {
+        menu.innerHTML = '<div style="padding:10px 14px;color:var(--text-muted);font-size:13px">Not logged in</div>';
+        return;
+    }
+
     try {
-        const res    = await fetch(`${VC_API}/guilds`, { headers: { 'ngrok-skip-browser-warning': 'true' } });
-        const data   = await res.json();
-        const guilds = data.guilds || [];
-        if (!guilds.length) {
+        // Fetch user's guilds + bot's guilds in parallel
+        const [userRes, botRes] = await Promise.all([
+            fetch('https://discord.com/api/users/@me/guilds', {
+                headers: { Authorization: `Bearer ${token}` }
+            }),
+            fetch(`${VC_API}/guilds`, { headers: { 'ngrok-skip-browser-warning': 'true' } })
+        ]);
+
+        const userGuilds = await userRes.json();
+        const botData    = await botRes.json();
+
+        if (!Array.isArray(userGuilds)) {
+            menu.innerHTML = '<div style="padding:10px 14px;color:var(--text-muted);font-size:13px">Failed to load servers</div>';
+            return;
+        }
+
+        const botGuildIds = new Set((botData.guilds || []).map(g => g.id));
+
+        // Only show guilds the user is in AND the bot is in
+        const mutual = userGuilds.filter(g => botGuildIds.has(g.id));
+
+        if (!mutual.length) {
             menu.innerHTML = '<div style="padding:10px 14px;color:var(--text-muted);font-size:13px">No mutual servers found</div>';
             return;
         }
+
         menu.innerHTML = '';
         menu.dataset.loaded = '1';
-        guilds.forEach(g => {
+
+        mutual.forEach(g => {
             const icon = g.icon
-                ? `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.webp?size=32`
-                : `https://cdn.discordapp.com/embed/avatars/0.png`;
+                ? `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png`
+                : null;
+
             const item = document.createElement('div');
             item.className = 'guild-dropdown-item';
-            item.innerHTML = `
-                <img src="${icon}" style="width:22px;height:22px;border-radius:50%;object-fit:cover;flex-shrink:0"
-                     onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
-                <span class="guild-dropdown-name" style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(g.name)}</span>`;
+            item.innerHTML = icon
+                ? `<img src="${icon}" alt="${_esc(g.name)}" style="width:22px;height:22px;border-radius:50%;object-fit:cover;flex-shrink:0">`
+                : `<div class="guild-initial" style="width:22px;height:22px;font-size:11px;flex-shrink:0">${g.name.charAt(0).toUpperCase()}</div>`;
+            item.innerHTML += `<span class="guild-dropdown-name" style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(g.name)}</span>`;
+
             item.onclick = () => {
                 _vcGuildId = g.id;
                 const txt = document.getElementById('vcGuildDropdownText');
@@ -400,10 +429,12 @@ async function _loadVcGuilds() {
                         img.style.cssText = 'width:20px;height:20px;border-radius:50%;margin-right:8px;vertical-align:middle;flex-shrink:0';
                         sel.prepend(img);
                     }
-                    img.src = icon;
+                    img.src = icon || '';
+                    img.style.display = icon ? '' : 'none';
                 }
                 menu.classList.add('hidden');
             };
+
             menu.appendChild(item);
         });
     } catch (_) {
