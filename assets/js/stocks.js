@@ -9,7 +9,10 @@ let stockChartInstance = null;
 let stocksRefreshInterval = null;
 
 /* ── Init ─────────────────────────────────── */
+let _stocksInitDone = false;
 window.initStocks = async function() {
+    if (_stocksInitDone) return;  // already loaded - interval handles refreshes
+    _stocksInitDone = true;
     await loadMarket();
     await loadLeaderboard();
     if (userProfile) await loadPortfolio();

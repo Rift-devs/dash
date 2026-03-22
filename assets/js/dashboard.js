@@ -158,11 +158,23 @@ function initTabs() {
                 t.classList.toggle('active', t.dataset.maintab === target);
             });
 
-            if (target === 'stocks'     && typeof window.initStocks     === 'function') window.initStocks();
-            if (target === 'lastfm'     && typeof window.initLastfm     === 'function') window.initLastfm();
-            if (target === 'moderation' && typeof window.initModeration === 'function') window.initModeration();
-            if (target === 'settings'   && typeof window.initSettings   === 'function') window.initSettings();
-            if (target === 'vccall'     && typeof window.initVcCall     === 'function') window.initVcCall();
+            // Lazy-load tab script if not yet loaded, then init
+            const _tabScripts = {
+                stocks:     ['assets/js/stocks.js',     () => window.initStocks?.()],
+                lastfm:     ['assets/js/lastfm.js',     () => window.initLastfm?.()],
+                moderation: ['assets/js/moderation.js', () => window.initModeration?.()],
+                settings:   ['assets/js/settings.js',   () => window.initSettings?.()],
+                vccall:     ['assets/js/vccall.js',     () => window.initVcCall?.()],
+            };
+            if (_tabScripts[target]) {
+                const [src, init] = _tabScripts[target];
+                if (typeof _lazyLoad === 'function') {
+                    _lazyLoad(src, init);
+                } else {
+                    // _lazyLoad not available yet - script may already be loaded
+                    init();
+                }
+            }
 
             if (window.innerWidth <= 768) closeSidebar();
         });
@@ -170,9 +182,9 @@ function initTabs() {
 }
 
 /* ================= WEBSOCKET (STATS) ================= */
-let _wsRetryDelay = 3000;  // declared outside so backoff persists across reconnects
 function initWebSocket() {
     ws = new WebSocket(WS_URL);
+    let _wsRetryDelay = 3000;
     
     ws.onopen = () => {
         _wsRetryDelay = 3000; // reset on successful connect
@@ -184,9 +196,6 @@ function initWebSocket() {
         const message = JSON.parse(event.data);
         if (message.type === 'stats') {
             updateStats(message.data);
-        } else if (message.type === 'music_state' && message.guild_id === String(selectedGuildId)) {
-            // Server pushed music state -- apply it directly, no HTTP needed
-            _applyMusicState(message.data);
         }
     };
     
@@ -796,125 +805,68 @@ document.addEventListener('click', (e) => {
 /* ================= MUSIC PLAYER & LYRICS ================= */
 let currentTrackUri = null;
 
-// _applyMusicState: shared between HTTP poll and WebSocket push
-function _applyMusicState(data) {
-    if (data.current) {
-        isPlaying = !data.paused;
-        // Sync interpolation local clock
-        if (Math.abs(localTimeMs - (data.position * 1000)) > 2000) {
-        localTimeMs = data.position * 1000;
-        }
-        lastSyncTimestamp = Date.now();
-
-        document.getElementById('currentTrackTitle').textContent = data.current.title;
-        document.getElementById('currentTrackAuthor').textContent = data.current.author;
-        document.getElementById('albumArt').style.backgroundImage = `url(${data.current.artwork || ''})`;
-        document.getElementById('albumArt').innerHTML = data.current.artwork ? '' : '<i class="fa-solid fa-compact-disc fa-spin-slow"></i>';
-
-        // Update play/pause icon safely without destroying the button
-        const ppIcon = document.querySelector('#playPauseBtn i');
-        if (ppIcon) ppIcon.className = data.paused ? 'fa-solid fa-play' : 'fa-solid fa-pause';
-        const ppTooltip = document.getElementById('playPauseTooltip');
-        if (ppTooltip) ppTooltip.textContent = data.paused ? 'Play' : 'Pause';
-
-        document.getElementById('timeTotal').textContent = formatTime(data.current.duration);
-
-        // Reflect loop mode — only touch the icon class, never innerHTML the button
-        const loopBtn = document.getElementById('loopBtn');
-        if (loopBtn) {
-        const loopMode = data.modes?.loop ?? 0;
-        _localLoopMode = loopMode;
-        const loopIcon = loopBtn.querySelector('i');
-        const loopTip = document.getElementById('loopTooltip');
-        // 0 = off, 1 = loop_one, 2 = loop_all
-        loopBtn.classList.toggle('active', loopMode !== 0);
-        loopBtn.classList.toggle('loop-all', loopMode === 2);
-        if (loopIcon) {
-            loopIcon.className = loopMode === 1 ? 'fa-solid fa-1 fa-xs' : 'fa-solid fa-repeat';
-        }
-        const labels = ['Loop: Off', 'Loop: One', 'Loop: All'];
-        if (loopTip) loopTip.textContent = labels[loopMode] ?? 'Loop: Off';
-        loopBtn.title = labels[loopMode] ?? 'Loop: Off';
-        }
-        
-        currentTrackDuration = data.current.duration;
-        
-        // Check if track changed to fetch new lyrics
-        if (currentTrackUri !== data.current.uri) {
-        currentTrackUri = data.current.uri;
-        fetchLyrics(data.current.title, data.current.author);
-        }
-
-        // Browser Media Session API
-        // Shows track in OS/browser media controls (taskbar, lock screen,
-        // browser tab, Bluetooth buttons, headphones, etc.)
-        if ('mediaSession' in navigator) {
-        navigator.mediaSession.metadata = new MediaMetadata({
-            title:  data.current.title  || 'Unknown',
-            artist: data.current.author || 'Unknown',
-            album:  'Rift Music',
-            artwork: data.current.artwork
-            ? [{ src: data.current.artwork, sizes: '512x512', type: 'image/jpeg' }]
-            : [],
-        });
-        navigator.mediaSession.playbackState = data.paused ? 'paused' : 'playing';
-
-        // Wire OS media buttons to bot controls
-        navigator.mediaSession.setActionHandler('play',     () => musicControl('toggle'));
-        navigator.mediaSession.setActionHandler('pause',    () => musicControl('toggle'));
-        navigator.mediaSession.setActionHandler('nexttrack',    () => musicControl('skip'));
-        navigator.mediaSession.setActionHandler('previoustrack',() => musicControl('prev'));
-        navigator.mediaSession.setActionHandler('stop',     () => musicControl('stop'));
-
-        // Keep a near-silent audio element looping so the browser
-        // maintains the media session even while the bot plays remotely.
-        if (!window._riftAudioEl) {
-            const _a = new Audio();
-            _a.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
-            _a.loop   = true;
-            _a.volume = 0.001;
-            window._riftAudioEl = _a;
-        }
-        if (data.paused) {
-            window._riftAudioEl.pause();
-        } else {
-            window._riftAudioEl.play().catch(() => {});
-        }
-
-        // Update the OS seek bar position
-        if (data.current.duration > 0) {
-            try {
-            navigator.mediaSession.setPositionState({
-                duration:     data.current.duration,
-                playbackRate: 1,
-                position:     Math.min(localTimeMs / 1000, data.current.duration),
-            });
-            } catch (_) {}
-        }
-        }
-    } else {
-        // Clear browser media session when nothing is playing
-        if ('mediaSession' in navigator) {
-        navigator.mediaSession.metadata = null;
-        navigator.mediaSession.playbackState = 'none';
-        if (window._riftAudioEl) window._riftAudioEl.pause();
-        }
-        isPlaying = false;
-        resetPlayer();
-    }
-
-    updateVcStatusBar(data.voice_channel ?? null);
-    renderQueue(data.queue);
-}
-
 async function updateMusicState() {
     if (!selectedGuildId || !API_BASE) return;
+    
     try {
         const res = await fetch(`${API_BASE}/music/state/${selectedGuildId}`, {
             headers: { 'ngrok-skip-browser-warning': 'true' }
         });
         const data = await res.json();
-        _applyMusicState(data);
+        
+        if (data.current) {
+            isPlaying = !data.paused;
+            // Sync interpolation local clock
+            if (Math.abs(localTimeMs - (data.position * 1000)) > 2000) {
+                localTimeMs = data.position * 1000;
+            }
+            lastSyncTimestamp = Date.now();
+
+            document.getElementById('currentTrackTitle').textContent = data.current.title;
+            document.getElementById('currentTrackAuthor').textContent = data.current.author;
+            document.getElementById('albumArt').style.backgroundImage = `url(${data.current.artwork || ''})`;
+            document.getElementById('albumArt').innerHTML = data.current.artwork ? '' : '<i class="fa-solid fa-compact-disc fa-spin-slow"></i>';
+
+            // Update play/pause icon safely without destroying the button
+            const ppIcon = document.querySelector('#playPauseBtn i');
+            if (ppIcon) ppIcon.className = data.paused ? 'fa-solid fa-play' : 'fa-solid fa-pause';
+            const ppTooltip = document.getElementById('playPauseTooltip');
+            if (ppTooltip) ppTooltip.textContent = data.paused ? 'Play' : 'Pause';
+
+            document.getElementById('timeTotal').textContent = formatTime(data.current.duration);
+
+            // Reflect loop mode — only touch the icon class, never innerHTML the button
+            const loopBtn = document.getElementById('loopBtn');
+            if (loopBtn) {
+                const loopMode = data.modes?.loop ?? 0;
+                _localLoopMode = loopMode;
+                const loopIcon = loopBtn.querySelector('i');
+                const loopTip = document.getElementById('loopTooltip');
+                // 0 = off, 1 = loop_one, 2 = loop_all
+                loopBtn.classList.toggle('active', loopMode !== 0);
+                loopBtn.classList.toggle('loop-all', loopMode === 2);
+                if (loopIcon) {
+                    loopIcon.className = loopMode === 1 ? 'fa-solid fa-1 fa-xs' : 'fa-solid fa-repeat';
+                }
+                const labels = ['Loop: Off', 'Loop: One', 'Loop: All'];
+                if (loopTip) loopTip.textContent = labels[loopMode] ?? 'Loop: Off';
+                loopBtn.title = labels[loopMode] ?? 'Loop: Off';
+            }
+            
+            currentTrackDuration = data.current.duration;
+            
+            // Check if track changed to fetch new lyrics
+            if (currentTrackUri !== data.current.uri) {
+                currentTrackUri = data.current.uri;
+                fetchLyrics(data.current.title, data.current.author);
+            }
+        } else {
+            isPlaying = false;
+            resetPlayer();
+        }
+
+        updateVcStatusBar(data.voice_channel ?? null);
+        renderQueue(data.queue);
     } catch (e) {
         console.error("Music state update failed:", e);
     }
@@ -1279,17 +1231,6 @@ function animationLoop(timestamp) {
                 if (_timeCurrent) _timeCurrent.textContent = formatTime(localTimeMs);
             }
 
-            // Keep OS media session position in sync using interpolated time
-            if ('mediaSession' in navigator && currentTrackDuration > 0) {
-                try {
-                    navigator.mediaSession.setPositionState({
-                        duration:     currentTrackDuration / 1000,
-                        playbackRate: 1,
-                        position:     Math.min(localTimeMs / 1000, currentTrackDuration / 1000),
-                    });
-                } catch (_) {}
-            }
-
             updateLyricsGlow();
         }
     }
@@ -1298,16 +1239,20 @@ function animationLoop(timestamp) {
 
 // Pause the animation clock when the browser tab is hidden
 document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) lastSyncTimestamp = Date.now();
+    if (!document.hidden) {
+        // Tab became visible - resync clock and fetch fresh state
+        lastSyncTimestamp = Date.now();
+        updateMusicState();
+    }
 });
 
-// HTTP poll is now a fallback only -- WebSocket push handles real-time updates.
-// 60s is enough to resync if WS is briefly disconnected.
+// Poll backend state — 20s is plenty; animation loop handles smooth progress bar.
+// Paused automatically when the browser tab is hidden (visibilitychange below).
 let _musicPollInterval = setInterval(() => {
     if (!document.hidden && document.getElementById('music').classList.contains('active')) {
         updateMusicState();
     }
-}, 60000);
+}, 20000);
 
 // ─── Client-side caches ────────────────────────────────────────────────────
 // Keyed by guildId. TTL in ms. Prevents repeat worker hits on guild re-select.

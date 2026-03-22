@@ -9,7 +9,10 @@ let fmRefreshInterval = null;
 let fmUserId = null;
 
 /* ── Init ─────────────────────────────────── */
+let _lastfmInitDone = false;
 window.initLastfm = async function() {
+    if (_lastfmInitDone) return;
+    _lastfmInitDone = true;
     if (!userProfile) { showFmNotLinked(); return; }
     fmUserId = userProfile.id;
     document.getElementById('lastfmProfileInner').classList.add('hidden');

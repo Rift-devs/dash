@@ -1204,11 +1204,23 @@
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="assets/js/dashboard.js"></script>
-    <script src="assets/js/stocks.js"></script>
-    <script src="assets/js/lastfm.js"></script>
-    <script src="assets/js/moderation.js"></script>
-    <script src="assets/js/settings.js"></script>
-    <script src="assets/js/vccall.js"></script>
+    <script>
+    // Lazy script loader - loads a JS file once on first tab visit
+    const _lazyLoaded = {};
+    function _lazyLoad(src, callback) {
+        if (_lazyLoaded[src]) { if (callback) callback(); return; }
+        const s = document.createElement("script");
+        s.src = src;
+        s.onload = () => { _lazyLoaded[src] = true; if (callback) callback(); };
+        document.body.appendChild(s);
+    }
+    // Preload stocks + lastfm after 3s idle (likely tabs user will visit)
+    // Heavy tabs (moderation, settings, vccall) only load on first open
+    setTimeout(() => {
+        _lazyLoad("assets/js/stocks.js");
+        _lazyLoad("assets/js/lastfm.js");
+    }, 3000);
+    </script>
     <script>
         function openSidebar() {
             document.getElementById('sidebar').classList.add('open');
