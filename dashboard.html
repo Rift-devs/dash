@@ -585,6 +585,72 @@
 
                         </div>
 
+                        <!-- Full-width: Chart Builder -->
+                        <div class="glass lastfm-chart-builder" id="fmChartBuilder">
+                            <div class="lastfm-section-label">
+                                <i class="fa-solid fa-grid-2"></i> Chart Builder
+                                <span class="fm-cb-hint">Generate an image chart of your top albums or artists</span>
+                            </div>
+                            <div class="fm-cb-controls">
+                                <!-- Row 1: type + size + period -->
+                                <div class="fm-cb-row">
+                                    <div class="fm-cb-group">
+                                        <label class="fm-cb-label">Type</label>
+                                        <div class="fm-cb-btns" id="cbType">
+                                            <button class="fm-cb-btn active" data-val="albums" onclick="fmCbSet('type','albums',this)">Albums</button>
+                                            <button class="fm-cb-btn" data-val="artists" onclick="fmCbSet('type','artists',this)">Artists</button>
+                                        </div>
+                                    </div>
+                                    <div class="fm-cb-group">
+                                        <label class="fm-cb-label">Size &nbsp;<span id="cbSizeLabel">3×3</span></label>
+                                        <input type="range" class="fm-cb-slider" id="cbSize" min="1" max="7" value="3"
+                                               oninput="document.getElementById('cbSizeLabel').textContent=this.value+'×'+this.value">
+                                    </div>
+                                    <div class="fm-cb-group">
+                                        <label class="fm-cb-label">Period</label>
+                                        <div class="fm-cb-btns" id="cbPeriod">
+                                            <button class="fm-cb-btn active" data-val="7day"    onclick="fmCbSet('period','7day',this)">7D</button>
+                                            <button class="fm-cb-btn" data-val="1month"  onclick="fmCbSet('period','1month',this)">1M</button>
+                                            <button class="fm-cb-btn" data-val="3month"  onclick="fmCbSet('period','3month',this)">3M</button>
+                                            <button class="fm-cb-btn" data-val="6month"  onclick="fmCbSet('period','6month',this)">6M</button>
+                                            <button class="fm-cb-btn" data-val="12month" onclick="fmCbSet('period','12month',this)">1Y</button>
+                                            <button class="fm-cb-btn" data-val="overall" onclick="fmCbSet('period','overall',this)">All</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- Row 2: style options -->
+                                <div class="fm-cb-row fm-cb-style-row">
+                                    <div class="fm-cb-group fm-cb-toggle-group">
+                                        <label class="fm-cb-label">Labels</label>
+                                        <button class="fm-cb-btn" id="cbLabels" onclick="fmCbToggle('labels',this)">Off</button>
+                                    </div>
+                                    <div class="fm-cb-group fm-cb-toggle-group">
+                                        <label class="fm-cb-label">Rounded</label>
+                                        <button class="fm-cb-btn" id="cbRounded" onclick="fmCbToggle('rounded',this)">Off</button>
+                                    </div>
+                                    <div class="fm-cb-group">
+                                        <label class="fm-cb-label">Gap &nbsp;<span id="cbGapLabel">0px</span></label>
+                                        <input type="range" class="fm-cb-slider" id="cbGap" min="0" max="20" value="0"
+                                               oninput="document.getElementById('cbGapLabel').textContent=this.value+'px'">
+                                    </div>
+                                    <div class="fm-cb-group">
+                                        <label class="fm-cb-label">Background</label>
+                                        <input type="color" class="fm-cb-color" id="cbBg" value="#141414">
+                                    </div>
+                                    <button class="fm-cb-generate-btn" onclick="fmCbGenerate()">
+                                        <i class="fa-solid fa-image"></i> Generate
+                                    </button>
+                                </div>
+                            </div>
+                            <!-- Preview area -->
+                            <div class="fm-cb-preview" id="fmCbPreview">
+                                <div class="fm-cb-placeholder">
+                                    <i class="fa-solid fa-grid-2" style="font-size:32px;opacity:0.2"></i>
+                                    <span>Configure options above and hit Generate</span>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Full-width: Listening Heatmap -->
                         <div class="glass lastfm-heatmap-card">
                             <div class="lastfm-section-label"><i class="fa-solid fa-calendar-days"></i> Listening Heatmap <span class="lastfm-heatmap-sub">last 52 weeks</span></div>
@@ -1204,23 +1270,11 @@
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="assets/js/dashboard.js"></script>
-    <script>
-    // Lazy script loader - loads a JS file once on first tab visit
-    const _lazyLoaded = {};
-    function _lazyLoad(src, callback) {
-        if (_lazyLoaded[src]) { if (callback) callback(); return; }
-        const s = document.createElement("script");
-        s.src = src;
-        s.onload = () => { _lazyLoaded[src] = true; if (callback) callback(); };
-        document.body.appendChild(s);
-    }
-    // Preload stocks + lastfm after 3s idle (likely tabs user will visit)
-    // Heavy tabs (moderation, settings, vccall) only load on first open
-    setTimeout(() => {
-        _lazyLoad("assets/js/stocks.js");
-        _lazyLoad("assets/js/lastfm.js");
-    }, 3000);
-    </script>
+    <script src="assets/js/stocks.js"></script>
+    <script src="assets/js/lastfm.js"></script>
+    <script src="assets/js/moderation.js"></script>
+    <script src="assets/js/settings.js"></script>
+    <script src="assets/js/vccall.js"></script>
     <script>
         function openSidebar() {
             document.getElementById('sidebar').classList.add('open');

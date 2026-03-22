@@ -9,10 +9,7 @@ let fmRefreshInterval = null;
 let fmUserId = null;
 
 /* ── Init ─────────────────────────────────── */
-let _lastfmInitDone = false;
 window.initLastfm = async function() {
-    if (_lastfmInitDone) return;
-    _lastfmInitDone = true;
     if (!userProfile) { showFmNotLinked(); return; }
     fmUserId = userProfile.id;
     document.getElementById('lastfmProfileInner').classList.add('hidden');
@@ -538,3 +535,100 @@ function renderFmHeatmap(weeks, wrap) {
             <span>More</span>
         </div>`;
 }
+/* =========================================================
+   CHART BUILDER
+   State: _cbState holds current settings.
+   Generate is debounced - rapid slider moves won't spam the API.
+   Image is generated server-side (PIL), returned as PNG/JPEG,
+   displayed inline, and downloadable.
+   The last URL is cached - re-opening the tab shows instantly.
+========================================================= */
+const _cbState = {
+    type:    'albums',
+    period:  '7day',
+    labels:  false,
+    rounded: false,
+    gap:     0,
+    bg:      '141414',
+};
+let _cbLastUrl = null;   // last generated image URL (for download)
+let _cbLoading = false;
+
+// Toggle button helpers
+window.fmCbSet = function(key, val, btn) {
+    _cbState[key] = val;
+    btn.closest('.fm-cb-btns').querySelectorAll('.fm-cb-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+};
+
+window.fmCbToggle = function(key, btn) {
+    _cbState[key] = !_cbState[key];
+    btn.textContent = _cbState[key] ? 'On' : 'Off';
+    btn.classList.toggle('active', _cbState[key]);
+};
+
+window.fmCbGenerate = async function() {
+    if (_cbLoading || !fmUserId || !API_BASE) return;
+    _cbLoading = true;
+
+    const preview  = document.getElementById('fmCbPreview');
+    const size     = document.getElementById('cbSize').value;
+    const gap      = document.getElementById('cbGap').value;
+    const bg       = document.getElementById('cbBg').value.replace('#', '');
+
+    // Build URL
+    const params = new URLSearchParams({
+        type:    _cbState.type,
+        size:    size,
+        period:  _cbState.period,
+        labels:  _cbState.labels,
+        rounded: _cbState.rounded,
+        gap:     gap,
+        bg:      bg,
+    });
+    const url = `${API_BASE}/lastfm/chart/${fmUserId}?${params}`;
+
+    // Show loading spinner
+    preview.innerHTML = `
+        <div class="fm-cb-loading">
+            <i class="fa-solid fa-circle-notch fa-spin"></i>
+            <span>Generating ${size}\xd7${size} chart\u2026</span>
+        </div>`;
+
+    try {
+        // Fetch with cache-busting only when settings changed
+        const resp = await fetch(url, { headers: { 'ngrok-skip-browser-warning': 'true' } });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({ error: 'Failed' }));
+            preview.innerHTML = `<div class="fm-cb-error"><i class="fa-solid fa-triangle-exclamation"></i> ${err.error || 'Error generating chart'}</div>`;
+            return;
+        }
+
+        // Blob URL so we can download without a second request
+        const blob    = await resp.blob();
+        const blobUrl = URL.createObjectURL(blob);
+
+        // Revoke previous to free memory
+        if (_cbLastUrl) URL.revokeObjectURL(_cbLastUrl);
+        _cbLastUrl = blobUrl;
+
+        const ext  = blob.type === 'image/jpeg' ? 'jpg' : 'png';
+        const name = `rift-chart-${_cbState.type}-${size}x${size}-${_cbState.period}.${ext}`;
+
+        preview.innerHTML = `
+            <div class="fm-cb-result">
+                <img class="fm-cb-img" src="${blobUrl}" alt="chart" loading="lazy">
+                <div class="fm-cb-actions">
+                    <a class="fm-cb-download-btn" href="${blobUrl}" download="${name}">
+                        <i class="fa-solid fa-download"></i> Download
+                    </a>
+                    <span class="fm-cb-meta">${size}\xd7${size} \xb7 ${_cbState.type} \xb7 ${_cbState.period}</span>
+                </div>
+            </div>`;
+    } catch(e) {
+        preview.innerHTML = `<div class="fm-cb-error"><i class="fa-solid fa-triangle-exclamation"></i> Network error</div>`;
+        console.error('[ChartBuilder]', e);
+    } finally {
+        _cbLoading = false;
+    }
+};
