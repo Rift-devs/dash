@@ -388,48 +388,51 @@ async function fetchGuilds(token) {
     const adminGuilds = guilds.filter(g => (BigInt(g.permissions) & 0x8n) || (BigInt(g.permissions) & 0x20n));
     
     const menu = document.getElementById('guildDropdownMenu');
-    menu.innerHTML = '';
+    if (menu) menu.innerHTML = '';
 
-    adminGuilds.forEach(g => {
-        const iconUrl = g.icon
-            ? `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png`
-            : null;
+    if (menu) {
+        adminGuilds.forEach(g => {
+            const iconUrl = g.icon
+                ? `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png`
+                : null;
 
-        const item = document.createElement('div');
-        item.className = 'guild-dropdown-item';
-        item.dataset.id = g.id;
-        item.dataset.name = g.name;
-        item.dataset.icon = iconUrl || '';
-        item.innerHTML = iconUrl
-            ? `<img src="${iconUrl}" alt="${g.name}">`
-            : `<div class="guild-initial">${g.name.charAt(0).toUpperCase()}</div>`;
-        item.innerHTML += `<span>${g.name}</span>`;
+            const item = document.createElement('div');
+            item.className = 'guild-dropdown-item';
+            item.dataset.id = g.id;
+            item.dataset.name = g.name;
+            item.dataset.icon = iconUrl || '';
+            item.innerHTML = iconUrl
+                ? `<img src="${iconUrl}" alt="${g.name}">`
+                : `<div class="guild-initial">${g.name.charAt(0).toUpperCase()}</div>`;
+            item.innerHTML += `<span>${g.name}</span>`;
 
-        item.addEventListener('click', () => {
-            selectedGuildId = g.id;
-            window._selectedGuildId = g.id;
-            if (typeof window._onGuildSelected === 'function') window._onGuildSelected(g.id);
+            item.addEventListener('click', () => {
+                selectedGuildId = g.id;
+                window._selectedGuildId = g.id;
+                if (typeof window._onGuildSelected === 'function') window._onGuildSelected(g.id);
 
-            // Update selected display
-            const selected = document.getElementById('guildDropdownSelected');
-            selected.innerHTML = iconUrl
-                ? `<div class="guild-dropdown-current"><img src="${iconUrl}" alt="${g.name}"><span>${g.name}</span></div>`
-                : `<div class="guild-dropdown-current"><div class="guild-initial">${g.name.charAt(0).toUpperCase()}</div><span>${g.name}</span></div>`;
-            selected.innerHTML += `<i class="fa-solid fa-chevron-down guild-dropdown-arrow"></i>`;
+                // Update selected display
+                const selected = document.getElementById('guildDropdownSelected');
+                if (selected) {
+                    selected.innerHTML = iconUrl
+                        ? `<div class="guild-dropdown-current"><img src="${iconUrl}" alt="${g.name}"><span>${g.name}</span></div>`
+                        : `<div class="guild-dropdown-current"><div class="guild-initial">${g.name.charAt(0).toUpperCase()}</div><span>${g.name}</span></div>`;
+                    selected.innerHTML += `<i class="fa-solid fa-chevron-down guild-dropdown-arrow"></i>`;
+                }
 
-            // Mark active
-            document.querySelectorAll('.guild-dropdown-item').forEach(el => el.classList.remove('active'));
-            item.classList.add('active');
+                // Mark active
+                document.querySelectorAll('.guild-dropdown-item').forEach(el => el.classList.remove('active'));
+                item.classList.add('active');
 
-            closeGuildDropdown();
-            // Debounced: batches all guild-change side-effects into one 150ms window
-            _onGuildSelectDebounced(g.id, g.name);
+                closeGuildDropdown();
+                // removed undefined _onGuildSelectDebounced
+            });
+
+            menu.appendChild(item);
         });
+    }
 
-        menu.appendChild(item);
-    });
-
-    renderServerGrid(adminGuilds);
+    // renderServerGrid(adminGuilds); - Removed for standalone dashboard
 
     // Populate tab-specific guild dropdowns (stocks + moderation)
     populateTabGuildDropdowns(adminGuilds);
@@ -491,6 +494,7 @@ window.selectTabGuild = function(tab, guildId, guildName, iconUrl) {
 function toggleGuildDropdown() {
     const menu = document.getElementById('guildDropdownMenu');
     const selected = document.getElementById('guildDropdownSelected');
+    if (!menu || !selected) return;
     const isOpen = !menu.classList.contains('hidden');
     if (isOpen) {
         closeGuildDropdown();
@@ -501,7 +505,9 @@ function toggleGuildDropdown() {
 }
 
 function closeGuildDropdown() {
-    document.getElementById('guildDropdownMenu').classList.add('hidden');
-    document.getElementById('guildDropdownSelected').classList.remove('open');
+    const menu = document.getElementById('guildDropdownMenu');
+    const selected = document.getElementById('guildDropdownSelected');
+    if (menu) menu.classList.add('hidden');
+    if (selected) selected.classList.remove('open');
 }
 
