@@ -6248,3 +6248,113 @@ input[type="range"]::-webkit-slider-thumb:hover {
     border-color: var(--danger);
     box-shadow: 0 0 12px rgba(240,71,71,0.25);
 }
+
+/* Verification Tab Styling */
+.verification-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+    animation: fadeIn 0.4s ease;
+}
+
+.v-flags-card {
+    overflow: hidden;
+}
+
+.v-flags-table-wrap {
+    margin-top: 20px;
+    overflow-x: auto;
+}
+
+.v-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.v-table th {
+    text-align: left;
+    padding: 12px 15px;
+    color: var(--text-muted);
+    font-weight: 500;
+    border-bottom: 1px solid var(--glass-border);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-size: 12px;
+}
+
+.v-table td {
+    padding: 15px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    vertical-align: middle;
+}
+
+.v-user-cell {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.v-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--glass-bg);
+}
+
+.v-username {
+    font-weight: 600;
+}
+
+.v-match-reason {
+    color: var(--danger);
+    font-size: 13px;
+    background: rgba(240, 71, 71, 0.1);
+    padding: 4px 8px;
+    border-radius: 6px;
+    display: inline-block;
+}
+
+.v-time {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.v-empty {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.v-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 15px;
+}
+
+.v-history-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 15px 20px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    transition: 0.2s;
+}
+
+.v-history-item:hover {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: var(--primary);
+}
+
+.v-fp-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--primary);
+    background: var(--primary-glow);
+    padding: 2px 8px;
+    border-radius: 4px;
+}

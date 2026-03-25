@@ -17,10 +17,6 @@ const DEFAULTS = {
     glassBlur:      10,
     font:           'Outfit',
     fontSize:       14,
-    waveform:       true,
-    autoScroll:     true,
-    compactQueue:   false,
-    stars:          true,
 };
 
 /* ── Init ─────────────────────────────────── */
@@ -28,7 +24,6 @@ window.initSettings = async function() {
     await loadPrefs();
     applyAllPrefs();
     renderSettingsUI();
-    loadPlaylists();
 };
 
 /* ── Load / Save prefs ───────────────────── */
@@ -99,9 +94,6 @@ function applyAllPrefs() {
     applyGlassBlur(_prefs.glassBlur ?? DEFAULTS.glassBlur);
     applyFont(_prefs.font || DEFAULTS.font);
     applyFontSize(_prefs.fontSize ?? DEFAULTS.fontSize);
-    applyPrefWaveform(_prefs.waveform ?? DEFAULTS.waveform);
-    applyPrefStars(_prefs.stars ?? DEFAULTS.stars);
-    applyPrefCompactQueue(_prefs.compactQueue ?? DEFAULTS.compactQueue);
 }
 
 /* ── Render settings UI ──────────────────── */
@@ -129,12 +121,6 @@ function renderSettingsUI() {
     document.querySelectorAll('.font-opt[data-font]').forEach(b => {
         b.classList.toggle('active', b.dataset.font === p.font || b.dataset.font === `'${p.font}'`);
     });
-
-    // Toggles
-    setToggle('prefWaveform',    p.waveform     ?? true);
-    setToggle('prefAutoScroll',  p.autoScroll   ?? true);
-    setToggle('prefCompactQueue',p.compactQueue ?? false);
-    setToggle('prefStars',       p.stars        ?? true);
 }
 
 function setSliderUI(id, val, labelFn) {
@@ -387,31 +373,7 @@ function applyFontSize(val) {
     document.documentElement.style.fontSize = `${val}px`;
 }
 
-/* ── Toggle prefs ────────────────────────── */
-window.savePref = function(key, val) {
-    _prefs[key] = val;
-    scheduleSave();
-    if (key === 'waveform')     applyPrefWaveform(val);
-    if (key === 'stars')        applyPrefStars(val);
-    if (key === 'compactQueue') applyPrefCompactQueue(val);
-};
 
-function applyPrefWaveform(on) {
-    const c = document.getElementById('waveformCanvas');
-    if (c) c.style.display = on ? 'block' : 'none';
-}
-
-function applyPrefStars(on) {
-    const c = document.getElementById('dashboard-stars-canvas');
-    if (c) c.style.opacity = on && _bgStyle === 'stars' ? '0.4' : '0';
-}
-
-function applyPrefCompactQueue(on) {
-    document.querySelectorAll('.queue-item').forEach(el => {
-        el.classList.toggle('queue-item--compact', on);
-    });
-    document.getElementById('queueList')?.classList.toggle('queue-list--compact', on);
-}
 
 /* ── Reset ───────────────────────────────── */
 window.resetAllSettings = function() {
@@ -448,232 +410,7 @@ function showSettingsToast(msg, type = 'success') {
     t._timer = setTimeout(() => t.classList.remove('show'), 2800);
 }
 
-/* ═══════════════════════════════════════════
-   PLAYLISTS
-═══════════════════════════════════════════ */
 
-let _playlists = [];
-let _activePlaylist = null;
-
-window.switchQueueTab = function(tab) {
-    document.querySelectorAll('.queue-tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.queue-subpanel').forEach(p => p.classList.remove('active'));
-    document.getElementById(`tab${tab.charAt(0).toUpperCase()+tab.slice(1)}`)?.classList.add('active');
-    document.getElementById(`${tab}Panel`)?.classList.add('active');
-    document.getElementById('queueClearBtn').style.display = tab === 'queue' ? '' : 'none';
-    if (tab === 'playlists') loadPlaylists();
-};
-
-window.loadPlaylists = async function() {
-    if (!API_BASE || !userProfile?.id) {
-        document.getElementById('playlistList').innerHTML =
-            '<div class="pl-empty">Login to view playlists</div>';
-        return;
-    }
-    // Cache for 2 minutes — re-fetched automatically after mutations (create/delete/remove)
-    if (typeof _cache !== 'undefined') {
-        const cached = _cache.get(`playlists:${userProfile.id}`);
-        if (cached) { _playlists = cached; renderPlaylistList(); return; }
-    }
-    try {
-        const res = await fetch(`${API_BASE}/playlists/${userProfile.id}`, {
-            headers: { 'ngrok-skip-browser-warning': 'true' }
-        });
-        const data = await res.json();
-        _playlists = data.playlists || [];
-        if (typeof _cache !== 'undefined') _cache.set(`playlists:${userProfile.id}`, _playlists, 120000);
-        renderPlaylistList();
-    } catch(e) {
-        document.getElementById('playlistList').innerHTML =
-            '<div class="pl-empty">Failed to load playlists</div>';
-    }
-};
-
-function renderPlaylistList() {
-    const el = document.getElementById('playlistList');
-    if (!_playlists.length) {
-        el.innerHTML = `
-            <div class="pl-empty">
-                <i class="fa-solid fa-record-vinyl"></i>
-                <span>No playlists yet</span>
-                <span class="pl-empty-sub">Create one to get started</span>
-            </div>`;
-        return;
-    }
-
-    el.innerHTML = _playlists.map((pl, i) => `
-        <div class="pl-card ${_activePlaylist === pl.name ? 'active' : ''}" onclick="togglePlaylist(${i})">
-            <div class="pl-card-main">
-                <div class="pl-card-icon">
-                    <i class="fa-solid fa-record-vinyl"></i>
-                </div>
-                <div class="pl-card-info">
-                    <span class="pl-card-name">${escPl(pl.name)}</span>
-                    <span class="pl-card-meta">${pl.track_count} track${pl.track_count !== 1 ? 's' : ''}${pl.is_public ? ' · Public' : ''}</span>
-                </div>
-                <div class="pl-card-actions">
-                    <button class="pl-btn-play" onclick="event.stopPropagation(); playPlaylist('${escPl(pl.name)}')" title="Play">
-                        <i class="fa-solid fa-play"></i>
-                    </button>
-                    <button class="pl-btn-shuffle" onclick="event.stopPropagation(); playPlaylist('${escPl(pl.name)}', true)" title="Shuffle">
-                        <i class="fa-solid fa-shuffle"></i>
-                    </button>
-                    <button class="pl-btn-delete" onclick="event.stopPropagation(); deletePlaylist('${escPl(pl.name)}')" title="Delete">
-                        <i class="fa-solid fa-trash"></i>
-                    </button>
-                </div>
-            </div>
-            ${_activePlaylist === pl.name ? renderPlaylistTracks(pl) : ''}
-        </div>`).join('');
-}
-
-function renderPlaylistTracks(pl) {
-    if (!pl.tracks?.length) return '<div class="pl-tracks-empty">No tracks</div>';
-    return `
-        <div class="pl-tracks">
-            ${pl.tracks.map((t, i) => `
-                <div class="pl-track-row">
-                    <span class="pl-track-num">${i+1}</span>
-                    <div class="pl-track-info">
-                        <span class="pl-track-title">${escPl(t.title)}</span>
-                        <span class="pl-track-artist">${escPl(t.artist || '')}</span>
-                    </div>
-                    <span class="pl-track-dur">${formatPlDuration(t.duration)}</span>
-                    <button class="pl-track-remove" onclick="removeTrackFromPlaylist('${escPl(pl.name)}',${i})" title="Remove">
-                        <i class="fa-solid fa-xmark"></i>
-                    </button>
-                </div>`).join('')}
-        </div>`;
-}
-
-window.togglePlaylist = function(idx) {
-    const pl = _playlists[idx];
-    _activePlaylist = _activePlaylist === pl.name ? null : pl.name;
-    renderPlaylistList();
-};
-
-window.playPlaylist = async function(name, shuffle = false) {
-    if (!selectedGuildId || !API_BASE) { showSettingsToast('Select a server first', 'error'); return; }
-    try {
-        const res = await fetch(`${API_BASE}/playlists/${userProfile.id}/play`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
-            body: JSON.stringify({ name, guild_id: selectedGuildId, shuffle }),
-        });
-        const data = await res.json();
-        if (data.error) { showSettingsToast(data.error, 'error'); return; }
-        showSettingsToast(data.status || '✓ Playing playlist');
-        setTimeout(updateMusicState, 800);
-    } catch(e) { showSettingsToast('Network error', 'error'); }
-};
-
-window.deletePlaylist = async function(name) {
-    if (!confirm(`Delete playlist "${name}"?`)) return;
-    try {
-        const res = await fetch(`${API_BASE}/playlists/${userProfile.id}/delete`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
-            body: JSON.stringify({ name }),
-        });
-        const data = await res.json();
-        if (data.status === 'deleted') {
-            if (typeof _cache !== 'undefined') _cache.del(`playlists:${userProfile.id}`);
-            showSettingsToast('Playlist deleted');
-            loadPlaylists();
-        } else showSettingsToast(data.error || 'Failed', 'error');
-    } catch(e) { showSettingsToast('Network error', 'error'); }
-};
-
-window.removeTrackFromPlaylist = async function(name, index) {
-    try {
-        const res = await fetch(`${API_BASE}/playlists/${userProfile.id}/remove_track`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
-            body: JSON.stringify({ name, index }),
-        });
-        const data = await res.json();
-        if (data.playlist) {
-            const idx = _playlists.findIndex(p => p.name.toLowerCase() === name.toLowerCase());
-            if (idx !== -1) _playlists[idx] = data.playlist;
-            renderPlaylistList();
-        }
-    } catch(e) {}
-};
-
-/* ── Create playlist modal ───────────────── */
-window.openCreatePlaylist = function() {
-    let modal = document.getElementById('createPlaylistModal');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'createPlaylistModal';
-        modal.className = 'mod-modal-overlay';
-        modal.innerHTML = `
-            <div class="mod-modal glass" onclick="event.stopPropagation()" style="max-width:380px">
-                <div class="mod-modal-header">
-                    <span><i class="fa-solid fa-record-vinyl"></i> New Playlist</span>
-                    <button class="mod-modal-close" onclick="document.getElementById('createPlaylistModal').classList.add('hidden')">
-                        <i class="fa-solid fa-xmark"></i>
-                    </button>
-                </div>
-                <div class="mod-modal-body">
-                    <input type="text" id="plNewName" placeholder="Playlist name..." class="mod-modal-reason" style="margin-top:0">
-                    <input type="text" id="plNewDesc" placeholder="Description (optional)..." class="mod-modal-reason">
-                    <label class="pl-public-row">
-                        <input type="checkbox" id="plNewPublic">
-                        <span>Make public</span>
-                    </label>
-                    <div class="mod-modal-buttons" style="margin-top:14px">
-                        <button class="mod-modal-cancel" onclick="document.getElementById('createPlaylistModal').classList.add('hidden')">Cancel</button>
-                        <button class="mod-modal-confirm" onclick="submitCreatePlaylist()">Create</button>
-                    </div>
-                    <div id="plCreateResult" class="fix-result hidden"></div>
-                </div>
-            </div>`;
-        modal.addEventListener('click', e => { if (e.target === modal) modal.classList.add('hidden'); });
-        document.body.appendChild(modal);
-    }
-    document.getElementById('plNewName').value = '';
-    document.getElementById('plNewDesc').value = '';
-    document.getElementById('plNewPublic').checked = false;
-    document.getElementById('plCreateResult').classList.add('hidden');
-    modal.classList.remove('hidden');
-    setTimeout(() => document.getElementById('plNewName').focus(), 50);
-};
-
-window.submitCreatePlaylist = async function() {
-    const name   = document.getElementById('plNewName').value.trim();
-    const desc   = document.getElementById('plNewDesc').value.trim();
-    const pub    = document.getElementById('plNewPublic').checked;
-    const result = document.getElementById('plCreateResult');
-
-    if (!name) { result.textContent = 'Name is required'; result.className = 'fix-result error'; result.classList.remove('hidden'); return; }
-
-    try {
-        const res = await fetch(`${API_BASE}/playlists/${userProfile.id}/create`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
-            body: JSON.stringify({ name, description: desc, public: pub }),
-        });
-        const data = await res.json();
-        if (data.error) { result.textContent = data.error; result.className = 'fix-result error'; result.classList.remove('hidden'); return; }
-        if (typeof _cache !== 'undefined') _cache.del(`playlists:${userProfile.id}`);
-        document.getElementById('createPlaylistModal').classList.add('hidden');
-        showSettingsToast(`✓ "${name}" created`);
-        loadPlaylists();
-    } catch(e) { result.textContent = 'Network error'; result.className = 'fix-result error'; result.classList.remove('hidden'); }
-};
-
-/* ── Helpers ─────────────────────────────── */
-function escPl(str) {
-    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-}
-
-function formatPlDuration(ms) {
-    if (!ms) return '';
-    const s = Math.floor(ms / 1000);
-    const m = Math.floor(s / 60);
-    return `${m}:${(s % 60).toString().padStart(2,'0')}`;
-}
 
 // Apply prefs as soon as this script loads (before initSettings is called)
 document.addEventListener('DOMContentLoaded', () => {
